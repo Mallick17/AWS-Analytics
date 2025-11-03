@@ -131,13 +131,7 @@ Cost = **30,090 × $0.005 / 1000 = $0.15**
 
 #### **5.5 Full Cost Calculation Model**
 
-Total =
-S3 Tables storage charge
-PUT request charge
-GET request charge
-Object monitoring charge
-Compaction (objects + data processed)
-Data outbound charges
+> Total = S3 Tables storage charge + PUT request charge + GET request charge + Object monitoring charge + Compaction (objects + data processed) + Data outbound charges
 
 ---
 
