@@ -207,11 +207,6 @@ Cost = **30,090 × $0.005 / 1000 = $0.15**
 
 But **not immediately with every PUT**.
 
-<details>
-    <summary>Click to view detailed explaination</summary>
-
-### **Detailed Explanation**
-
 #### 1. When your application writes data using:
 
 * S3 PUT APIs
@@ -263,6 +258,56 @@ These **maintenance operations** are what trigger:
 * Using batching or micro-batching
 * Using Spark/Flink optimized writers
 
+<details>
+    <summary>Click to view the detailed Explaination</summary>
+
+When you store data in Amazon S3 Tables using put requests (uploading data files), the S3 Tables service automatically performs compaction in the background to optimize storage and query efficiency. Here is how compaction occurs:
+
+### How Compaction Occurs in S3 Tables
+
+1. **Granular Writes Create Many Small Files:**  
+   Each put request often creates a small file (or object) in the table, especially in transactional or streaming workloads where data arrives continuously and in small chunks.
+
+2. **Small Files Impact Query Performance:**  
+   Large numbers of small files increase the overhead for query engines, needing multiple reads and scans, which degrade performance.
+
+3. **Automatic Background Compaction:**  
+   S3 Tables automatically combines many smaller files into fewer, larger files during compaction. This process is transparent to users and requires no manual intervention.
+
+4. **Target File Size and Strategies:**  
+   - By default, S3 Tables aim to compact files to about 512 MB in size, but this target can be tuned between 64 MB and 512 MB via AWS CLI configuration.  
+   - Different compaction strategies are supported including binpack (default), sort, and z-order compaction for optimized query patterns on large-scale datasets.
+
+5. **Compacted Files Form Latest Table Snapshot:**  
+   Files created by compaction become the latest snapshot of the table, ensuring data remains current and efficiently organized for queries.
+
+6. **Benefits:**  
+   - Improved query speed due to fewer file scans and higher data read throughput.  
+   - Reduced storage overhead by minimizing metadata and file fragmentation.  
+   - Reduced operational complexity as manual compaction management is avoided.
+
+### Summary of the Compaction Process
+
+| Step                        | Description                                        |
+|-----------------------------|--------------------------------------------------|
+| Data Upload                 | Put requests add small files to the table        |
+| Performance Impact          | Many small files degrade query performance       |
+| Automatic Compaction        | Background process merges small files into bigger ones |
+| Configurable Target Size    | Default 512 MB per file, adjustable via CLI      |
+| Compaction Strategies       | Binpack (default), sort compaction, z-order compaction |
+| Final Outcome              | Latest snapshot with optimized file structure    |
+
+This automatic compaction in S3 Tables helps maintain efficient and performant data access for large-scale analytics workloads without user intervention or additional infrastructure.
+
+[How amazon s3 tables uses compaction](https://aws.amazon.com/blogs/storage/how-amazon-s3-tables-use-compaction-to-improve-query-performance-by-up-to-3-times/)
+[amazon-s3-tables-reduce-compaction-costs](https://aws.amazon.com/about-aws/whats-new/2025/07/amazon-s3-tables-reduce-compaction-costs/)
+[S3 Tables](https://www.onehouse.ai/blog/s3-managed-tables-unmanaged-costs-the-20x-surprise-with-aws-s3-tables)
+[Amazon s3 iceberg compaction](https://www.infoq.com/news/2025/07/amazon-s3-iceberg-compaction/)
+[Amazon s3 Table](https://hevodata.com/learn/amazon-s3-table/)
+[why-amazon-s3-tables-is-a-game-changer-for-transactional-data-lakes](https://www.granica.ai/blog/why-amazon-s3-tables-is-a-game-changer-for-transactional-data-lakes)
+[data-analytics/spark-operator-s3tables](https://awslabs.github.io/data-on-eks/docs/blueprints/data-analytics/spark-operator-s3tables)
+[small-file-problem-s3](https://www.upsolver.com/blog/small-file-problem-s3)
+ 
 </details>
 
 ---
