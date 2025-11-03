@@ -54,7 +54,7 @@ General-purpose object storage:
 
 ---
 
-### **3. Apache Iceberg — Why S3 Tables Use It**
+### **3. [Apache Iceberg — Why S3 Tables Use It](https://aws.amazon.com/what-is/apache-iceberg/)**
 
 Apache Iceberg is an open-source table format built for data lakes. S3 Tables:
 
