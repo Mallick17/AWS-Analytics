@@ -28,13 +28,13 @@ The main difference between “S3” and “S3 tables” lies in their purpose a
 
 | Feature               | Standard S3 Buckets          | S3 Tables (Table Buckets)  |
 |-----------------------|-----------------------------|----------------------------|
-| Storage type          | General object storage[8]      | Managed tabular storage[1][5]     |
-| Data structure        | Unstructured/object-based[8]   | Columns, rows, metadata[1][6]     |
-| Optimization          | Manual                       | Automatic (compaction, snapshots)[1][8] |
-| Analytics integration | Limited/Manual               | Native for Iceberg, Athena, Redshift[1][7] |
-| Performance           | Depends on setup             | Up to 3x faster queries[5][7]              |
-| API                   | Standard S3 API[8]              | Table-specific API, SQL support[1][10]      |
-| Permissions           | Bucket/object level          | Table level[1][6]           |
+| Storage type          | General object storage     | Managed tabular storage    |
+| Data structure        | Unstructured/object-based  | Columns, rows, metadata   |
+| Optimization          | Manual                       | Automatic (compaction, snapshots) |
+| Analytics integration | Limited/Manual               | Native for Iceberg, Athena, Redshift |
+| Performance           | Depends on setup             | Up to 3x faster queries             |
+| API                   | Standard S3 API              | Table-specific API, SQL support      |
+| Permissions           | Bucket/object level          | Table level         |
 
 In summary, standard S3 is best for storing any file type generically, while S3 tables are specifically optimized for structured, high-performance analytics on tabular data.
 
