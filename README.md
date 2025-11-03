@@ -288,12 +288,8 @@ These **maintenance operations** are what trigger:
 * Spark/Flink: streaming and batch
 * Glue: ETL automation
 
----
-
-##### **Online References (All Articles Included)**
-
 <details>
-    <summary>Click to view the links of the materials</summary>
+    <summary>Click to view the links of Online References (All Articles Included)</summary>
 
 1. [https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables.html](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables.html)
 2. [https://www.youtube.com/watch?v=brgh-VhN2hU](https://www.youtube.com/watch?v=brgh-VhN2hU)
