@@ -62,14 +62,80 @@ Apache Iceberg is an open-source table format built for data lakes. S3 Tables:
 * Store metadata using **Iceberg manifests**
 * Provide high-speed reads and efficient incremental writes
 
-##### **Iceberg Benefits**
+<details>
+    <summary>Click to view the Key Capabilities of Apache Iceberg</summary>
 
-SQL-friendly
-ACID transactions
-Schema evolution (add/remove/rename columns)
-Time-travel & versioning
-Incremental processing (CDC)
-Compatible with Spark, Flink, Presto, Hive, Redshift, Athena
+### Key Capabilities of Apache Iceberg**
+
+Apache Iceberg is a modern open-source table format designed for large-scale analytics on data lakes. It provides advanced features such as ACID transactions, schema evolution, versioning, and incremental processing — all while remaining engine-agnostic and SQL-friendly.
+
+#### **1. SQL Familiarity**
+
+Iceberg fully supports SQL-based table operations.
+Anyone familiar with SQL can create, modify, query, and manage Iceberg tables without learning new languages or frameworks. This makes Iceberg easy to adopt for analysts, engineers, and developers.
+
+#### **2. Strong Data Consistency**
+
+Iceberg ensures that all readers and writers see a consistent view of the dataset.
+It uses ACID transactions so that concurrent operations do not conflict, guaranteeing reliable data reads and writes across distributed systems.
+
+#### **3. Flexible Data Structure (Schema Evolution)**
+
+Iceberg allows seamless and safe schema changes, including:
+
+* Adding columns
+* Renaming columns
+* Removing columns
+
+These operations do not require rewriting existing data and do not break queries or pipelines.
+
+#### **4. Data Versioning and Time Travel**
+
+Iceberg maintains snapshots of table states over time.
+This enables:
+
+* Querying historical versions (time travel)
+* Comparing old and new data
+* Auditing changes after updates or deletes
+
+Snapshots make rollback and historical analysis simple and efficient.
+
+#### **5. Cross-Platform Compatibility**
+
+Iceberg works across multiple engines and storage systems.
+It integrates with:
+
+* Apache Spark
+* Apache Flink
+* Apache Hive
+* Presto/Trino
+* AWS Athena, Redshift, EMR
+  This flexibility allows Iceberg tables to be used in any modern data lake or lakehouse environment.
+
+#### **6. Incremental Processing (CDC Support)**
+
+Iceberg supports efficient incremental data processing.
+Instead of scanning entire datasets, engines can read only:
+
+* New data
+* Modified data
+* Deleted data
+
+This reduces compute cost and improves job performance for CDC, ETL, and streaming workloads.
+
+---
+
+#### **7. Maintenance Configuration Limitation**
+
+Certain Iceberg maintenance settings are **incompatible**:
+
+* `history.expire.max-snapshot-age-ms`
+* `history.expire.min-snapshots-to-keep`
+
+These two properties cannot be used together because they represent conflicting snapshot retention rules.
+One controls retention by **age**, the other by **count** — so only one method should be used per table.
+
+</details>
 
 ---
 
