@@ -23,6 +23,9 @@ Amazon S3 has long been a foundational object storage service for storing all ty
 | Integration with Analytics | Limited                | Native integration                 |
 | Permissions                | Bucket/object level    | Table-level IAM                    |
 
+<details>
+    <summary>Click to view the detailed comparison</summary>
+
 #### **2.2 Standard S3 Buckets**
 
 General-purpose object storage:
@@ -51,6 +54,8 @@ General-purpose object storage:
 > Up to **10 table buckets per region**
 > Up to **10,000 tables per bucket**
 > S3 automatically optimizes table data layout and metadata for analytics.
+
+</details>
 
 ---
 
@@ -159,6 +164,10 @@ These engines can directly query, snapshot, merge, compact, or time-travel the I
 
 ### **5. S3 Tables Pricing (Mumbai Region)**
 
+<details>
+    <summary>Click to view the pricing</summary>
+
+
 #### **5.1 Storage Charges**
 
 | Tier              | Price (per GB per month)     |
@@ -198,6 +207,8 @@ Cost = **30,090 × $0.005 / 1000 = $0.15**
 #### **5.5 Full Cost Calculation Model**
 
 > Total = S3 Tables storage charge + PUT request charge + GET request charge + Object monitoring charge + Compaction (objects + data processed) + Data outbound charges
+
+</details>
 
 ---
 
