@@ -462,31 +462,33 @@ docker run --name mysql-container \
 
 2. **Data Intact** (connect and query):
    ```
-   docker exec -it mysql-container mysql -u root -p=rootpass -e "USE employees; SHOW TABLES;"
+   mysql -u root -p
+   USE employees;
+   SHOW TABLES;
    ```
    - Lists `employees`, `salaries`, etc.
    ```
-   docker exec -it mysql-container mysql -u root -p=rootpass -e "USE employees; SELECT COUNT(*) FROM employees;"
+   SELECT COUNT(*) FROM employees;
    ```
    - ~300,024 rows.
 
 3. **Binlog Enabled**:
    ```
-   docker exec -it mysql-container mysql -u root -p=rootpass -e "SHOW MASTER STATUS;"
+   SHOW MASTER STATUS;
    ```
    - Shows `File: mysql-bin.000001` (or similar), `Position` > 0.
    ```
-   docker exec -it mysql-container mysql -u root -p=rootpass -e "SHOW GLOBAL VARIABLES LIKE 'binlog_format';"
+   SHOW GLOBAL VARIABLES LIKE 'binlog_format';
    ```
    - `Value: ROW`.
    ```
-   docker exec -it mysql-container mysql -u root -p=rootpass -e "SHOW GLOBAL VARIABLES LIKE 'local_infile';"
+   SHOW GLOBAL VARIABLES LIKE 'local_infile';
    ```
    - `Value: ON`.
 
 4. **Config Applied** (optional check):
    ```
-   docker exec -it mysql-container bash -c "cat /etc/mysql/conf.d/binlog.cnf"
+   cat /etc/mysql/conf.d/binlog.cnf
    ```
    - Shows your snippet.
 
@@ -502,4 +504,4 @@ GRANT ALL PRIVILEGES ON employees.* TO 'debezium'@'%';
 FLUSH PRIVILEGES;
 EXIT;
 ```
-- Test connection: `docker exec -it mysql-container mysql -u debezium -p=dbz -e "USE employees; SELECT COUNT(*) FROM employees LIMIT 1;"` (should work).
+- Test connection: `mysql -u debezium -p -e "USE employees; SELECT COUNT(*) FROM employees LIMIT 1;"`
