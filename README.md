@@ -776,4 +776,230 @@ EXIT;
 
 ---
 
-# Kafka
+# **Apache Kafka**
+
+### **1. Introduction**
+
+Apache Kafka is a **distributed event-streaming platform** used to build real-time, scalable, fault-tolerant applications.
+It solves the problems of tight coupling, slow synchronous communication, and bottlenecks in microservice architectures.
+
+Kafka acts as a **central event broker**, decoupling services so they can work independently and at their own pace.
+
+### **2. Why Kafka? (Problem Before Kafka)**
+
+Imagine an e-commerce platform with microservices:
+
+* **Order Service**
+* **Inventory Service**
+* **Payment Service**
+* **Notification Service**
+* **Analytics Service**
+
+#### **2.1 Before Kafka (Direct Service-to-Service Calls)**
+Services call each other directly:
+
+```
+Order → Payment → Inventory → Notification → Analytics
+```
+
+#### **Problems**
+
+1. **Tight Coupling**
+
+   * If Payment service is down, Order service hangs.
+
+2. **Synchronous Communication**
+
+   * One slow service backs up the entire chain.
+
+3. **Single Points of Failure**
+
+   * One service outage → entire system freezes.
+
+4. **Scaling Issues**
+
+   * During traffic spikes (e.g., Black Friday), system collapses.
+
+### **3. What Kafka Does — The Broker Model**
+
+Kafka introduces a **broker** between services:
+
+```
+Order Service → Kafka → (Inventory, Notification, Payment, Analytics)
+```
+
+Kafka works like a **post office**:
+
+* Producers drop messages (events).
+* Consumers pick them up whenever they’re ready.
+
+### **4. Core Kafka Concepts**
+
+#### **4.1 Events**
+
+An **event** is a simple record:
+
+* Key
+* Value (payload)
+* Metadata (timestamp, headers)
+
+Example: “Order Placed”
+
+#### **4.2 Producers**
+
+A **producer** writes events to Kafka.
+
+```javascript
+producer.send({
+   topic: "orders",
+   key: "order-123",
+   value: JSON.stringify(orderData)
+});
+```
+
+#### **4.3 Topics**
+
+Topics are **categories** of events.
+
+Examples:
+
+* `orders`
+* `payments`
+* `inventory-updates`
+* `driver-locations`
+
+You define topics based on your system design.
+
+---
+
+### **5. Consumers and Subscriptions**
+
+A **consumer** subscribes to topics and processes incoming events.
+
+Example consumers of `orders` topic:
+
+* Notification Service → send email
+* Inventory Service → reduce stock
+* Payment Service → generate invoice
+
+Kafka automatically notifies subscribed consumers when new events arrive.
+
+---
+
+### **6. Kafka is Not a Database**
+
+Kafka **stores events**, but it is **not** a replacement for a database.
+
+Why?
+
+* Inventory updates are still saved in a normal database.
+* But events are also written to Kafka to trigger downstream workflows such as:
+
+  * low stock alerts
+  * restock automation
+  * analytics dashboards
+  * audit logs
+
+Kafka stores data to support:
+
+* replays
+* analytics
+* long-term event history
+
+---
+
+### **7. Real-Time Processing with Kafka Streams**
+
+Kafka Streams API enables **continuous real-time analytics**, such as:
+
+* Low-stock detection
+* Real-time sales dashboards
+* Processing GPS updates (e.g., Uber driver location updates)
+
+It processes **streams**, not individual messages.
+
+---
+
+### **8. Scaling with Partitions**
+
+Topics are split into **partitions** for parallel processing.
+
+### Example:
+
+```
+orders topic:
+- partition-1 (EU)
+- partition-2 (US)
+- partition-3 (Asia)
+```
+
+Benefits:
+
+* High throughput (multiple producers write in parallel)
+* High scalability (multiple consumers read in parallel)
+* Fault tolerance
+
+---
+
+### **9. Consumer Groups**
+
+To consume partitions in parallel, Kafka uses **consumer groups**.
+
+```
+Consumer Group: inventory-service
+ ├── Consumer Instance 1 → reads partition 1
+ ├── Consumer Instance 2 → reads partition 2
+ └── Consumer Instance 3 → reads partition 3
+```
+
+Rules:
+
+* One partition → exactly **one** consumer in a group.
+* Adding more replicas scales processing.
+* If one consumer dies, Kafka reassigns its partition to another.
+
+---
+
+### **10. Kafka Brokers**
+
+A **broker** is a Kafka server that:
+
+* Stores topic data on disk
+* Handles producers and consumers
+* Manages replication for fault tolerance
+* Delivers events like a post office outlet
+
+A Kafka cluster consists of **multiple brokers**.
+
+---
+
+### **11. Kafka vs Traditional Message Brokers**
+
+| Feature             | Traditional Queue (RabbitMQ, SQS) | Kafka                           |
+| ------------------- | --------------------------------- | ------------------------------- |
+| Message removal     | Deleted after consumption         | Stored for configured retention |
+| Replayability       | No                                | Yes                             |
+| Real-time streaming | Limited                           | Built-in                        |
+| Throughput          | Medium                            | Very high                       |
+| Storage             | Temporary                         | Persistent commit log           |
+
+**Analogy:**
+
+* Traditional queue = Live TV (watch once)
+* Kafka = Netflix (watch anytime, replay, pause)
+
+---
+
+### **12. ZooKeeper vs KRaft**
+
+#### **Old Architecture**
+
+* Used **ZooKeeper** for cluster metadata, leader election, configuration.
+
+#### **New Architecture**
+
+* Kafka 3.0+ includes **KRaft (Kafka Raft)** mode.
+* ZooKeeper is no longer needed.
+* Kafka manages its own metadata internally.
+
+---
