@@ -524,6 +524,10 @@ These control snapshots, filtering, data handling, etc. Grouped by category.
 </details>
 
 ## Debezium Setup
+
+<details>
+    <summary>Click to viewthe setup</summary>
+
 #### Step 1: Create Custom Config for Binlog + Local Infile
 Your shown `my.cnf` is the default (no binlog; `log_bin` commented). We'll create a snippet that gets included via `/etc/mysql/conf.d/` (as per `!includedir` in the default).
 
@@ -615,3 +619,8 @@ FLUSH PRIVILEGES;
 EXIT;
 ```
 - Test connection: `mysql -u debezium -p -e "USE employees; SELECT COUNT(*) FROM employees LIMIT 1;"`
+
+
+</details>
+
+---
