@@ -416,6 +416,15 @@ This automatic compaction in S3 Tables helps maintain efficient and performant d
 ### Debezium MySQL Connector Configuration Overview
 The Debezium MySQL connector captures row-level changes from MySQL databases (including Amazon RDS for MySQL) by reading the binary log (binlog). Configurations are set as key-value pairs when registering the connector via Kafka Connect REST API or properties files. All properties are optional unless marked required, with sensible defaults for most. 
 
+### How Debezium Connector Works
+• Connects to the source database using native features like binary logs or CDC tables.
+• Takes an initial consistent snapshot of data for tables being monitored.
+• Streams ongoing row-level change events to Kafka topics or other sinks.
+• Supports filters to include/exclude schemas, tables, or columns.
+• Supports masking of sensitive data in columns.
+- Provides monitoring via JMX and transformations for routing/filtering events.
+
+
 <details>
     <summary>Click to view CDC Configurations for Debezium with Amazon RDS MySQL</summary>
 
@@ -772,6 +781,35 @@ EXIT;
 - Test connection: `mysql -u debezium -p -e "USE employees; SELECT COUNT(*) FROM employees LIMIT 1;"`
 
 
+</details>
+
+<details>
+    <summary>Concept</summary>
+
+The Debezium connector is a source connector that captures Change Data Capture (CDC) events from databases and streams those events as change records into Kafka topics. It does not directly connect to or notify an S3 data lake. Instead, it focuses on reliably detecting and recording row-level data changes (inserts, updates, deletes) from the database in real time by reading database logs like binlogs or logical replication streams.
+
+### Role of Debezium Connector in Kafka Ecosystem
+- Monitors databases for changes and publishes these changes as events into Kafka topics.
+- These events represent every database row change for configured tables, including metadata about the transaction and schema changes.
+- It acts as the link between the database and Kafka, ensuring all changes are captured and available as Kafka events.
+
+### How Changes Reach S3 Data Lake
+- Debezium itself does not pull or push data directly to S3.
+- Instead, another component, typically a Kafka sink connector or streaming application, consumes the change events from the Kafka topics produced by Debezium.
+- This sink connector or application then writes the changes into the S3 data lake in the desired format (e.g., Parquet, Avro, JSON).
+- The sink can be managed via Kafka Connect, Spark, Flink, or custom consumers—this is where the notification or pushing of changes to S3 happens.
+
+### Summary of Behavior:
+1. Debezium captures database changes and streams them to Kafka topics.
+2. Kafka topics act as the durable, streaming buffer of change events.
+3. An S3 sink connector or processing application consumes from Kafka and writes to S3 data lake.
+4. This decouples CDC event capture (Debezium) from data lake ingestion (sink connector), enabling scalable, fault-tolerant data pipelines.
+
+Thus, the Debezium connector's job is to keep Kafka in sync with the database changes by producing CDC events, while the downstream system responsible for S3 ingestion must consume those events and persist them into the data lake storage.
+
+This separation of concerns helps build flexible pipelines where change capture, stream processing, and storage ingestion can evolve independently and scale according to workload.
+
+ 
 </details>
 
 ---
