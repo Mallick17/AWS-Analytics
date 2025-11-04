@@ -413,3 +413,93 @@ This automatic compaction in S3 Tables helps maintain efficient and performant d
 ---
 
 # Debezium
+## Debezium Setup
+#### Step 1: Create Custom Config for Binlog + Local Infile
+Your shown `my.cnf` is the default (no binlog; `log_bin` commented). We'll create a snippet that gets included via `/etc/mysql/conf.d/` (as per `!includedir` in the default).
+
+```
+mkdir -p ~/mysql-config
+cat > ~/mysql-config/binlog.cnf << EOF
+[mysqld]
+# Debezium requirements
+log-bin=mysql-bin
+binlog_format=ROW
+server-id=184054  # Unique; matches tutorial
+
+# From your steps (enable LOAD DATA if needed)
+local-infile=1
+
+# Optional: Retain binlogs longer
+expire_logs_days=10
+EOF
+```
+- This overrides/adds only what's needed; default remains intact.
+
+#### Step 2: Start the New Container with Mounts
+```
+docker run --name mysql-container \
+  -e MYSQL_ROOT_PASSWORD=rootpass \
+  -d -p 3306:3306 \
+  -v ~/mysql-config/binlog.cnf:/etc/mysql/conf.d/binlog.cnf \
+  mysql:8.0
+```
+- `-v .../binlog.cnf:/etc/mysql/conf.d/binlog.cnf`: Enables binlog on startup (included automatically).
+- `-v .../mysql-data-extract:/var/lib/mysql`: Bind-mounts your extracted data dir (persistent; changes survive restarts).
+- Wait for startup (~30-60s; MySQL recovers indexes):
+  ```
+  docker logs -f mysql-container
+  ```
+  - Look for: "ready for connections", no errors about datadir (it'll use the mounted one).
+  - Ctrl+C to stop following.
+
+#### Step 3: Follow the steps to [Import the DB to the MySQL](https://github.com/Mallick17/SQL-NoSQL#step-by-step-guide-to-import-the-employees-database-into-a-mysql-container)
+
+#### Step 4: Verify Everything
+1. **Container Running**:
+   ```
+   docker ps  # mysql-container should be UP
+   ```
+
+2. **Data Intact** (connect and query):
+   ```
+   docker exec -it mysql-container mysql -u root -p=rootpass -e "USE employees; SHOW TABLES;"
+   ```
+   - Lists `employees`, `salaries`, etc.
+   ```
+   docker exec -it mysql-container mysql -u root -p=rootpass -e "USE employees; SELECT COUNT(*) FROM employees;"
+   ```
+   - ~300,024 rows.
+
+3. **Binlog Enabled**:
+   ```
+   docker exec -it mysql-container mysql -u root -p=rootpass -e "SHOW MASTER STATUS;"
+   ```
+   - Shows `File: mysql-bin.000001` (or similar), `Position` > 0.
+   ```
+   docker exec -it mysql-container mysql -u root -p=rootpass -e "SHOW GLOBAL VARIABLES LIKE 'binlog_format';"
+   ```
+   - `Value: ROW`.
+   ```
+   docker exec -it mysql-container mysql -u root -p=rootpass -e "SHOW GLOBAL VARIABLES LIKE 'local_infile';"
+   ```
+   - `Value: ON`.
+
+4. **Config Applied** (optional check):
+   ```
+   docker exec -it mysql-container bash -c "cat /etc/mysql/conf.d/binlog.cnf"
+   ```
+   - Shows your snippet.
+
+#### Step 5: Create Debezium User (If Not Already)
+```
+docker exec -it mysql-container mysql -u root -p=rootpass
+```
+In MySQL:
+```
+CREATE USER IF NOT EXISTS 'debezium'@'%' IDENTIFIED BY 'dbz';
+GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'debezium'@'%';
+GRANT ALL PRIVILEGES ON employees.* TO 'debezium'@'%';
+FLUSH PRIVILEGES;
+EXIT;
+```
+- Test connection: `docker exec -it mysql-container mysql -u debezium -p=dbz -e "USE employees; SELECT COUNT(*) FROM employees LIMIT 1;"` (should work).
