@@ -411,3 +411,5 @@ This automatic compaction in S3 Tables helps maintain efficient and performant d
 </details>
 
 ---
+
+# Debezium
