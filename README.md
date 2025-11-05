@@ -904,6 +904,66 @@ MC --> KafkaCluster
 SEC --> KafkaCluster
 ```
 
+
+```mermaid
+flowchart LR
+
+subgraph ProducersLayer
+  Prod1[Producer 1]
+  Prod2[Producer 2]
+end
+
+subgraph KafkaCluster["Kafka Cluster"]
+  Broker1[Broker 1]
+  Broker2[Broker 2]
+  Broker3[Broker 3]
+end
+
+subgraph Topics["Topics & Partitions"]
+  TopicA1["Topic-A Partition 0 (Leader: B1)"]
+  TopicA2["Topic-A Partition 1 (Leader: B2)"]
+  TopicA3["Topic-A Partition 2 (Leader: B3)"]
+  
+  TopicB1["Topic-B Partition 0 (Leader: B2)"]
+  TopicB2["Topic-B Partition 1 (Leader: B3)"]
+end
+
+subgraph ConsumersLayer
+  CG1["Consumer Group 1"]
+  CG2["Consumer Group 2"]
+end
+
+Prod1 --> TopicA1
+Prod1 --> TopicA2
+Prod2 --> TopicA3
+Prod2 --> TopicB1
+Prod2 --> TopicB2
+
+TopicA1 --> CG1["Consumer 1 of Group 1"]
+TopicA2 --> CG1["Consumer 2 of Group 1"]
+TopicA3 --> CG1["Consumer 3 of Group 1"]
+
+TopicB1 --> CG2["Consumer 1 of Group 2"]
+TopicB2 --> CG2["Consumer 2 of Group 2"]
+
+Broker1 --> TopicA1
+Broker2 --> TopicA2 & TopicB1
+Broker3 --> TopicA3 & TopicB2
+
+subgraph Replication["Replication (Follower replicas)"]
+  TopicA1R["Topic-A Partition 0 Follower B2,B3"]
+  TopicA2R["Topic-A Partition 1 Follower B1,B3"]
+  TopicA3R["Topic-A Partition 2 Follower B1,B2"]
+end
+
+TopicA1R --> Broker2
+TopicA1R --> Broker3
+TopicA2R --> Broker1
+TopicA2R --> Broker3
+TopicA3R --> Broker1
+TopicA3R --> Broker2
+```
+
 ### **2. Why Kafka? (Problem Before Kafka)**
 
 Imagine an e-commerce platform with microservices:
