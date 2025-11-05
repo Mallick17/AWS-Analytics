@@ -438,6 +438,7 @@ The Debezium MySQL connector captures row-level changes from MySQL databases (in
 - Supports filters to include/exclude schemas, tables, or columns.
 - Supports masking of sensitive data in columns.
 - Provides monitoring via JMX and transformations for routing/filtering events.
+- [Storing state of a Debezium connector](https://debezium.io/documentation/reference/stable/configuration/storage.html)
 
 ```mermaid
 flowchart TD
