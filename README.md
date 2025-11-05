@@ -2140,6 +2140,10 @@ Kafka uses **Log4j2** for logging. There are multiple variants:
 | `connect-log4j2.yaml` | Log4j2 config specific to Kafka Connect workers.                                               |
 | `tools-log4j2.yaml`   | Log4j2 config for Kafka CLI tools like console producer/consumer, topic management tools, etc. |
 
+
+<details>
+    <summary>Click to view the configuration of logging mentioned above</summary>
+
 - log4j.properties
 ```
 kafka.logs.dir=logs
@@ -2461,6 +2465,8 @@ Configuration:
         - ref: STDERR
 
 ```
+    
+</details>
 
 ### **Other / Tools**
 
