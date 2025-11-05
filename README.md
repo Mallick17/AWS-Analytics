@@ -210,9 +210,10 @@ Cost = **30,090 × $0.005 / 1000 = $0.15**
 
 </details>
 
----
+#### **Do Applications Writing Directly to S3 Tables Trigger Compaction Costs?**
 
-### **6. Do Applications Writing Directly to S3 Tables Trigger Compaction Costs?**
+<details>
+    <summary>Click to view how S3 Tables Trigger Compaction Costs</summary>
 
 #### **Short Answer:** **Yes — eventually.**
 
@@ -269,6 +270,8 @@ These **maintenance operations** are what trigger:
 * Using batching or micro-batching
 * Using Spark/Flink optimized writers
 
+</details>
+
 <details>
     <summary>Click to view the detailed Explaination</summary>
 
@@ -321,8 +324,6 @@ This automatic compaction in S3 Tables helps maintain efficient and performant d
  
 </details>
 
----
-
 ### **7. RDS vs S3 Tables**
 
 | Feature        | RDS                          | S3 Tables                          |
@@ -367,9 +368,10 @@ This automatic compaction in S3 Tables helps maintain efficient and performant d
 
 </details>
 
----
-
 ### **8. S3 Tables — Behavior Summary**
+
+<details>
+    <summary>Click to view the S3 Tables behaviour summary</summary>
 
 ##### **1. Automatic Maintenance**
 
@@ -404,6 +406,8 @@ This automatic compaction in S3 Tables helps maintain efficient and performant d
 * Spark/Flink: streaming and batch
 * Glue: ETL automation
 
+</details>
+
 <details>
     <summary>Click to view the links of Online References (All Articles Included)</summary>
 
@@ -428,11 +432,11 @@ This automatic compaction in S3 Tables helps maintain efficient and performant d
 The Debezium MySQL connector captures row-level changes from MySQL databases (including Amazon RDS for MySQL) by reading the binary log (binlog). Configurations are set as key-value pairs when registering the connector via Kafka Connect REST API or properties files. All properties are optional unless marked required, with sensible defaults for most. 
 
 ### How Debezium Connector Works
-• Connects to the source database using native features like binary logs or CDC tables.
-• Takes an initial consistent snapshot of data for tables being monitored.
-• Streams ongoing row-level change events to Kafka topics or other sinks.
-• Supports filters to include/exclude schemas, tables, or columns.
-• Supports masking of sensitive data in columns.
+- Connects to the source database using native features like binary logs or CDC tables.
+- Takes an initial consistent snapshot of data for tables being monitored.
+- Streams ongoing row-level change events to Kafka topics or other sinks.
+- Supports filters to include/exclude schemas, tables, or columns.
+- Supports masking of sensitive data in columns.
 - Provides monitoring via JMX and transformations for routing/filtering events.
 
 
