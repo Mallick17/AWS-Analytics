@@ -439,6 +439,47 @@ The Debezium MySQL connector captures row-level changes from MySQL databases (in
 - Supports masking of sensitive data in columns.
 - Provides monitoring via JMX and transformations for routing/filtering events.
 
+<details>
+    <summary>Click to view Debezium’s CDC reading the binlog from the replica instead of the master</summary>
+
+### 1. MySQL/RDS Binlog Replication Basics
+
+* **Master (Primary)**:
+
+  * All changes (INSERT, UPDATE, DELETE) are written to the **binlog**.
+* **Replica (Slave)**:
+
+  * Pulls the binlog events from the master and applies them to its own data.
+  * By default, replicas **can have their own binlog enabled**, which is called **“log_slave_updates”** in MySQL.
+
+    * If `log_slave_updates = ON`, the replica writes **all replicated events** into its **own binlog**, just like the master.
+    * This allows the replica to act as a source for downstream replication or tools like Debezium.
+* **Without `log_slave_updates`**, the replica applies the changes but **does not record them in its own binlog**.
+
+### 2. Implications for Debezium
+
+* If you want Debezium to read from a **replica**:
+
+  1. **Enable binlog on the replica** (`binlog_format=ROW` and `log_slave_updates=ON`).
+  2. Debezium can then read the **replicated binlog events** from the replica **exactly as they appeared on the master**.
+  3. This will **reduce load on the master**, because Debezium is now reading the binlog from the replica instead.
+
+* Caveats:
+
+  * Make sure the replica’s binlog **starts from the current position of replication**. Otherwise, Debezium might miss early events.
+  * There may be **slight replication lag**, so the events on the replica binlog may be slightly delayed compared to the master.
+
+### Summary
+
+* **Yes**, the binlog can exist on the replica **if `log_slave_updates` is enabled**.
+* **Debezium can read from the replica** safely if:
+
+  * `binlog_format=ROW`
+  * `log_slave_updates=ON`
+  * The replica is configured to allow connections from Debezium.
+* This approach **reduces load on the master** while still capturing all CDC events.
+
+</details>
 
 <details>
     <summary>Click to view CDC Configurations for Debezium with Amazon RDS MySQL</summary>
