@@ -926,6 +926,11 @@ SEC --> KafkaCluster
 
 </details>
 
+<details>
+    <summary>Click to view the Architecture</summary>
+
+### Technical Kafka Architecture
+
 ```mermaid
 flowchart LR
 
@@ -984,6 +989,46 @@ TopicA2R --> Broker3
 TopicA3R --> Broker1
 TopicA3R --> Broker2
 ```
+
+---
+
+### Explanation of Components
+
+| Component             | Description                                                | Example / Technical Note                                   |
+| --------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| **Producer**          | Service that writes events to Kafka                        | Prod1 sending logs, Prod2 sending metrics                  |
+| **Topic**             | Named stream of messages                                   | Topic-A, Topic-B                                           |
+| **Partition**         | Subset of a topic for parallelism                          | Topic-A has 3 partitions (0,1,2)                           |
+| **Leader / Follower** | Partition leader handles reads/writes; followers replicate | Topic-A Partition 0 → Leader B1, Followers B2/B3           |
+| **Broker**            | Kafka server storing topics/partitions                     | B1, B2, B3                                                 |
+| **Consumer Group**    | Set of consumers consuming topic partitions in parallel    | CG1 consuming Topic-A; each consumer reads one partition   |
+| **Replication**       | Each partition is replicated for fault tolerance           | RF=3 → each partition has 1 leader + 2 followers           |
+| **Consumer**          | Reads messages from topic partitions                       | Consumer 1 reads Partition 0, Consumer 2 reads Partition 1 |
+
+### Data Flow Example
+
+1. **Producers send events**:
+
+   * Prod1 → Topic-A Partition 0 (Leader Broker1)
+   * Prod2 → Topic-B Partition 0 (Leader Broker2)
+
+2. **Kafka Broker stores events**:
+
+   * Leader writes to disk and replicates to follower brokers
+   * If leader fails, one follower becomes new leader automatically
+
+3. **Consumers read events**:
+
+   * Consumer Group 1 → partitions of Topic-A (1 consumer per partition)
+   * Consumer Group 2 → partitions of Topic-B
+
+4. **Parallelism & Fault Tolerance**:
+
+   * Multiple partitions → multiple consumers in same group → higher throughput
+   * Replication ensures availability even if a broker goes down
+    
+</details>
+
 
 ### **2. Why Kafka? (Problem Before Kafka)**
 
