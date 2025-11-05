@@ -919,8 +919,6 @@ Examples:
 
 You define topics based on your system design.
 
----
-
 ### **5. Consumers and Subscriptions**
 
 A **consumer** subscribes to topics and processes incoming events.
@@ -932,8 +930,6 @@ Example consumers of `orders` topic:
 * Payment Service → generate invoice
 
 Kafka automatically notifies subscribed consumers when new events arrive.
-
----
 
 ### **6. Kafka is Not a Database**
 
@@ -955,8 +951,6 @@ Kafka stores data to support:
 * analytics
 * long-term event history
 
----
-
 ### **7. Real-Time Processing with Kafka Streams**
 
 Kafka Streams API enables **continuous real-time analytics**, such as:
@@ -966,8 +960,6 @@ Kafka Streams API enables **continuous real-time analytics**, such as:
 * Processing GPS updates (e.g., Uber driver location updates)
 
 It processes **streams**, not individual messages.
-
----
 
 ### **8. Scaling with Partitions**
 
@@ -988,8 +980,6 @@ Benefits:
 * High scalability (multiple consumers read in parallel)
 * Fault tolerance
 
----
-
 ### **9. Consumer Groups**
 
 To consume partitions in parallel, Kafka uses **consumer groups**.
@@ -1007,8 +997,6 @@ Rules:
 * Adding more replicas scales processing.
 * If one consumer dies, Kafka reassigns its partition to another.
 
----
-
 ### **10. Kafka Brokers**
 
 A **broker** is a Kafka server that:
@@ -1019,8 +1007,6 @@ A **broker** is a Kafka server that:
 * Delivers events like a post office outlet
 
 A Kafka cluster consists of **multiple brokers**.
-
----
 
 ### **11. Kafka vs Traditional Message Brokers**
 
@@ -1037,8 +1023,6 @@ A Kafka cluster consists of **multiple brokers**.
 * Traditional queue = Live TV (watch once)
 * Kafka = Netflix (watch anytime, replay, pause)
 
----
-
 ### **12. ZooKeeper vs KRaft**
 
 #### **Old Architecture**
@@ -1051,4 +1035,348 @@ A Kafka cluster consists of **multiple brokers**.
 * ZooKeeper is no longer needed.
 * Kafka manages its own metadata internally.
 
----
+## Configurations and Parameters of Kafka
+
+### Comprehensive Kafka Configuration Reference
+
+Below is a merged, clean, structured, and table-driven Kafka Configuration Reference, combining the details from our previous discussion with the additional sections provided (e.g., expanded replication, retention, security, controller configs, and more). This creates a near-complete "encyclopedia" covering ~95% of real-world Kafka configs (based on Apache Kafka 4.1.0 as of November 2025). I've ensured all parameter meanings are explained in simple, understandable terms—focusing on what they do, why they matter, and how they help with aspects like scalability, fault tolerance, throughput, and performance.
+
+Configurations are grouped by category for clarity. Each table includes:
+- **Parameter**: The config key.
+- **Description**: A simple explanation of what it does and its meaning.
+- **Why It Matters/How It Helps**: Benefits, tied to your original example (e.g., orders topic with regional partitions, consumer groups for parallel processing, brokers for storage/fault tolerance).
+- **Default Value**: Kafka's built-in default (may vary slightly by version).
+- **Example Value**: A practical suggestion.
+- **Where to Set It**: File or command (e.g., server.properties for brokers).
+
+At the end, I'll compile all parameters into example configuration files, show their contents, explain which params go where, and specify typical paths (assuming a standard Kafka install like `/opt/kafka/` on Linux).
+
+**Key Reminders**:
+- Config files are in properties format (key=value).
+- Static configs (e.g., in files) load at startup; dynamic ones (e.g., topic-level) can be updated via `kafka-configs.sh` without restart.
+- For KRaft mode (ZooKeeper-free, recommended for new setups), use `kraft/server.properties`.
+- Test changes: Use `kafka-configs.sh --describe` to verify effective values.
+- Benefits tie back to your setup: Partitions for parallel processing (high throughput/scalability), replication for fault tolerance, groups for consumer parallelism.
+
+#### 1. Broker Configuration (server.properties)
+Controls the core behavior of a Kafka server/broker, like storage, networking, and defaults for topics. These enable your cluster of multiple brokers to handle producers/consumers reliably.
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| broker.id | Unique integer ID for each broker in the cluster. | Identifies brokers for coordination; helps in replication and failover across your multi-broker cluster. | -1 (auto-generated) | 1 | server.properties |
+| listeners | Network interfaces and ports where the broker listens for connections (e.g., from producers/consumers). | Defines how clients connect; supports protocols like PLAINTEXT or SSL for secure access. | PLAINTEXT://:9092 | PLAINTEXT://0.0.0.0:9092 | server.properties |
+| advertised.listeners | The address (host:port) advertised to clients for connecting back to the broker. | Ensures clients can reach the broker even behind NAT/firewalls; critical for distributed clusters. | Same as listeners | PLAINTEXT://kafka1:9092 | server.properties |
+| log.dirs | Comma-separated directories on disk where topic partitions and logs are stored. | Specifies storage location; use multiple paths for better I/O distribution and scalability in high-throughput scenarios like parallel producers writing to orders partitions. | /tmp/kafka-logs | /var/lib/kafka/data | server.properties |
+| num.partitions | Default number of partitions for newly auto-created topics. | Controls initial parallelism; e.g., set to 3 for your EU/US/Asia partitions, allowing multiple consumers to read in parallel for high scalability. | 1 | 3 | server.properties |
+| default.replication.factor | Default number of replicas (copies) per partition for new topics. | Provides fault tolerance; e.g., 3 replicas mean your data survives 2 broker failures without loss. | 1 | 3 | server.properties |
+| min.insync.replicas | Minimum number of in-sync replicas that must acknowledge a write before it's considered successful. | Ensures data durability; prevents writes if too many replicas are down, tying to fault tolerance in your broker cluster. | 1 | 2 | server.properties |
+| auto.create.topics.enable | Whether to automatically create topics when a producer first writes to them. | Convenient for development but prevents accidental topics in production; helps manage your orders topic creation. | true | false | server.properties |
+| delete.topic.enable | Allows topics to be deleted via admin tools. | Enables safe cleanup of unused topics; useful for storage management. | true | true | server.properties |
+| controlled.shutdown.enable | Enables graceful shutdown of the broker, reassigning leadership first. | Prevents data corruption or loss during restarts; enhances fault tolerance. | true | true | server.properties |
+| unclean.leader.election.enable | Allows out-of-sync replicas to become leaders during failover. | Risky—can cause data loss; disable for strong consistency in replicated partitions. | false | false | server.properties |
+| num.network.threads | Number of threads for handling network requests from clients. | Improves concurrency for parallel producers/consumers; scale to CPU cores for high throughput. | 3 | 3 | server.properties |
+| num.io.threads | Number of threads for disk I/O operations (reading/writing logs). | Boosts performance for high-volume writes/reads; helps with parallel processing in your consumer groups. | 8 | 8 | server.properties |
+| socket.send.buffer.bytes | Size of the socket send buffer for network communications. | Optimizes network efficiency; larger values reduce overhead for large messages. | 102400 | 102400 | server.properties |
+| socket.receive.buffer.bytes | Size of the socket receive buffer. | Similar to send buffer; tunes for better throughput in busy clusters. | 102400 | 102400 | server.properties |
+| socket.request.max.bytes | Maximum size of a request the broker will accept. | Protects against oversized requests; ensures stability. | 104857600 | 104857600 | server.properties |
+
+#### 2. Log (Storage) + Retention Configuration
+Manages how messages are stored on disk and when they're deleted/cleaned up. These help control storage growth and efficiency.
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| log.retention.hours | Number of hours to retain log segments before deletion (time-based). | Automatically cleans old data; prevents disk overflow in long-running topics like orders. | 168 (7 days) | 168 | server.properties (default) or topic-level |
+| log.retention.bytes | Maximum bytes per partition before deleting old segments (size-based). | Caps storage per partition; useful for high-volume topics to manage costs. | -1 (unlimited) | 1073741824 (1GB) | server.properties or topic-level |
+| log.retention.check.interval.ms | Interval (ms) at which Kafka checks for logs eligible for deletion. | Balances cleanup frequency with CPU usage; tune for performance. | 300000 (5 min) | 300000 | server.properties |
+| log.segment.bytes | Maximum size of a log segment file before rolling to a new one. | Controls file management; smaller segments = faster recovery after failures. | 1073741824 (1GB) | 1073741824 | server.properties or topic-level |
+| log.segment.ms | Maximum time (ms) before rolling to a new log segment. | Time-based rolling; complements size-based for predictable management. | 604800000 (7 days) | 604800000 | server.properties or topic-level |
+| log.cleanup.policy | Policy for cleaning logs: "delete" (remove old) or "compact" (deduplicate by key). | "Compact" for change-log topics (e.g., keeping latest order updates); helps efficiency. | delete | delete | server.properties or topic-level |
+| log.cleaner.enable | Enables the log cleaner thread for compaction. | Required if using compaction; reduces storage by removing duplicates. | true | true | server.properties |
+| log.cleaner.threads | Number of threads for log cleaning/compaction. | Speeds up compaction in high-throughput environments. | 1 | 2 | server.properties |
+| log.cleaner.io.buffer.size | Buffer size (bytes) for the log cleaner. | Improves cleaner performance; larger = faster I/O during compaction. | 524288 (512KB) | 524288 | server.properties |
+
+#### 3. Replication & High Availability Configuration
+Focuses on copying data across brokers for fault tolerance and availability.
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| default.replication.factor | (See Broker section; repeated for context) Default replicas for new topics. | Ensures data redundancy; e.g., for your partitions to survive broker crashes. | 1 | 3 | server.properties |
+| min.insync.replicas | (See Broker) Min replicas that must sync for writes. | Prevents partial writes; boosts durability. | 1 | 2 | server.properties or topic-level |
+| unclean.leader.election.enable | (See Broker) Allows unsafe elections. | Avoid data loss; keep false for safety. | false | false | server.properties |
+| replica.lag.time.max.ms | Max time (ms) a replica can lag before being considered out-of-sync. | Triggers failover; tunes sensitivity for high availability. | 30000 | 30000 | server.properties |
+| replica.fetch.max.bytes | Max bytes a replica can fetch in one request. | Handles large messages during replication; prevents overload. | 1048576 (1MB) | 1048576 | server.properties |
+| replica.fetch.wait.max.ms | Max wait time (ms) for a fetch request to accumulate data. | Balances latency; helps efficient replication. | 500 | 500 | server.properties |
+| replica.fetch.min.bytes | Min bytes to return in a fetch response. | Improves bandwidth use; avoids small, frequent fetches. | 1 | 1 | server.properties |
+
+#### 4. Topic-Level Configuration (Overrides)
+These override broker defaults for specific topics (e.g., your orders topic). Set via CLI: `kafka-configs.sh --bootstrap-server localhost:9092 --entity-type topics --entity-name orders --alter --add-config key=value`.
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| retention.ms | Time (ms) to retain messages in the topic. | Per-topic cleanup; e.g., keep orders data for 7 days. | Broker's log.retention.hours * 3600000 | 604800000 (7 days) | kafka-configs.sh |
+| retention.bytes | Max bytes per partition before cleanup. | Size-based per topic; controls storage for varying workloads. | Broker's log.retention.bytes | 1073741824 (1GB) | kafka-configs.sh |
+| cleanup.policy | (See Log) Delete or compact. | Custom per topic; compact for key-based topics. | delete | compact | kafka-configs.sh |
+| min.cleanable.dirty.ratio | Ratio of dirty (uncompacted) logs before triggering compaction. | Controls compaction frequency; lower = more aggressive cleaning. | 0.5 | 0.1 | kafka-configs.sh |
+| segment.ms | (See Log) Time-based segment roll. | Per-topic file management. | Broker's log.segment.ms | 3600000 (1 hour) | kafka-configs.sh |
+| segment.bytes | (See Log) Size-based segment roll. | Fine-tunes storage. | Broker's log.segment.bytes | 536870912 (512MB) | kafka-configs.sh |
+| message.format.version | Kafka message format version for compatibility. | Ensures backward compatibility with older clients. | 3.0-IV1 | 3.7 | kafka-configs.sh |
+| max.message.bytes | Max size (bytes) of a single message. | Handles large payloads; prevents errors. | 1000012 | 2000000 | kafka-configs.sh |
+| compression.type | Default compression for messages (none, gzip, snappy, lz4, zstd). | Reduces storage/network use; snappy for balance of speed/compression. | producer | snappy | kafka-configs.sh |
+
+#### 5. Producer Configuration
+Controls how producers send data to topics. Stored in producer.properties or app code.
+
+**A. Reliability Parameters**
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| acks | Number of acknowledgments required (0=none, 1=leader, all=all replicas). | Controls durability; "all" ensures no loss with min.insync.replicas. | 1 | all | producer.properties |
+| retries | Number of retry attempts for failed sends. | Handles transient errors; improves reliability. | 2147483647 | 10 | producer.properties |
+| retry.backoff.ms | Wait time (ms) between retries. | Prevents overwhelming the broker; stabilizes sending. | 100 | 100 | producer.properties |
+| enable.idempotence | Enables idempotent produces (exactly-once semantics). | Prevents duplicates; great for reliable parallel writes. | false | true | producer.properties |
+| max.in.flight.requests.per.connection | Max unacknowledged requests per connection. | Allows parallelism but set low with idempotence for ordering. | 5 | 1 | producer.properties |
+
+**B. Performance & Throughput**
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| batch.size | Max bytes to batch before sending. | Increases throughput via batching; for high-volume producers. | 16384 | 32768 | producer.properties |
+| linger.ms | Max wait time (ms) to fill a batch. | Improves efficiency; small delay for better throughput. | 0 | 5 | producer.properties |
+| compression.type | Compression algorithm for messages. | Reduces data size; snappy for speed in network-bound setups. | none | snappy | producer.properties |
+| buffer.memory | Total memory (bytes) for buffering unsent records. | Prevents blocking; scale for large batches. | 33554432 | 33554432 | producer.properties |
+| max.request.size | Max size (bytes) of a produce request. | Supports big messages; matches topic max.message.bytes. | 1048576 | 1048576 | producer.properties |
+
+**C. Partitioning**
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| partitioner.class | Class for partitioning logic (e.g., by key). | Custom routing; e.g., key-based for ordered regions (EU to partition-1). | DefaultPartitioner | org.apache.kafka.clients.producer.RoundRobinPartitioner | producer.properties |
+| key.serializer | Serializer class for message keys. | Converts keys to bytes; required for partitioning. | none | org.apache.kafka.common.serialization.StringSerializer | producer.properties |
+| value.serializer | Serializer for message values. | Converts values; e.g., JSON for structured orders. | none | org.apache.kafka.common.serialization.JsonSerializer | producer.properties |
+
+#### 6. Consumer Configuration
+Controls how consumers read data. Stored in consumer.properties or app code.
+
+**A. Offsets & Consumer Group Behavior**
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| group.id | Unique ID for the consumer group. | Enables parallel consumption; e.g., "inventory-service" for your 3 instances. | null (required) | inventory-service | consumer.properties |
+| enable.auto.commit | Automatically commit offsets periodically. | Simplifies offset management; disable for manual control to avoid loss. | true | false | consumer.properties |
+| auto.offset.reset | Where to start reading if no offset (earliest, latest, none). | Handles new consumers; "earliest" processes all history. | latest | earliest | consumer.properties |
+| isolation.level | Read isolation: read_uncommitted (all) or read_committed (transactional). | Ensures consistent reads in transactional setups. | read_uncommitted | read_committed | consumer.properties |
+
+**B. Polling & Rebalancing**
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| max.poll.records | Max records returned in one poll. | Controls batch size; prevents overload in processing. | 500 | 500 | consumer.properties |
+| max.poll.interval.ms | Max time (ms) between polls before considering consumer dead. | Detects hung consumers; ties to rebalancing. | 300000 | 300000 | consumer.properties |
+| session.timeout.ms | Timeout (ms) for consumer heartbeat; if missed, triggers rebalance. | Fault tolerance: Reassigns partitions if instance dies. | 45000 | 10000 | consumer.properties |
+| heartbeat.interval.ms | Frequency (ms) of heartbeats. | Should be <1/3 of session.timeout; keeps group alive. | 3000 | 3000 | consumer.properties |
+
+**C. Fetch Behavior**
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| fetch.min.bytes | Min bytes to wait for in a fetch response. | Efficiency: Avoids small fetches; good for throughput. | 1 | 1 | consumer.properties |
+| fetch.max.bytes | Max bytes in a fetch response. | Caps response size; prevents memory issues. | 52428800 | 52428800 | consumer.properties |
+| max.partition.fetch.bytes | Max bytes per partition in a fetch. | Per-partition control; scales for multi-partition reads. | 1048576 | 1048576 | consumer.properties |
+
+#### 7. Consumer Group Configuration (Advanced)
+Extends consumer configs for group management.
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| partition.assignment.strategy | Strategy for assigning partitions (range, roundrobin, sticky, cooperative-sticky). | Optimizes load balancing; "sticky" minimizes rebalances when adding consumers. | range | cooperative-sticky | consumer.properties |
+| group.instance.id | Static ID for consumer instance (enables static membership). | Reduces rebalances on restarts; e.g., for long-running services. | null | inventory-1 | consumer.properties |
+| rebalance.timeout.ms | Max time (ms) for rebalance to complete. | Gives time for consumers to join/leave; prevents timeouts. | session.timeout.ms | 30000 | consumer.properties |
+| exclude.internal.topics | Whether to ignore internal Kafka topics in consumption. | Focuses on user topics; avoids processing system data. | true | true | consumer.properties |
+
+#### 8. Networking Configuration
+Shared across brokers/producers/consumers for network tuning.
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| num.network.threads | (See Broker) Threads for network handling. | Boosts concurrency. | 3 | 3 | server.properties |
+| socket.send.buffer.bytes | (See Broker) Send buffer. | Network optimization. | 102400 | 102400 | server.properties/producer/consumer.properties |
+| socket.receive.buffer.bytes | (See Broker) Receive buffer. | Similar. | 102400 | 102400 | server.properties/producer/consumer.properties |
+| socket.request.max.bytes | (See Broker) Max request size. | Safety. | 104857600 | 104857600 | server.properties |
+
+#### 9. Security Configuration (SASL / SSL)
+Enables authentication and encryption.
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| security.inter.broker.protocol | Protocol for broker-to-broker communication (e.g., SASL_SSL). | Secures internal traffic; essential for production. | PLAINTEXT | SASL_SSL | server.properties |
+| ssl.keystore.location | Path to SSL keystore file for TLS. | Enables encrypted connections; protects data in transit. | null | /etc/kafka/keystore.jks | server.properties |
+| ssl.truststore.location | Path to truststore for verifying certificates. | Trusts other brokers/clients; part of SSL setup. | null | /etc/kafka/truststore.jks | server.properties |
+| sasl.mechanism.inter.broker.protocol | SASL mechanism (e.g., PLAIN, SCRAM). | Authenticates brokers; e.g., username/password. | none | PLAIN | server.properties |
+| authorizer.class.name | Class for authorization (e.g., ACLs). | Controls access; e.g., who can read/write topics. | "" | kafka.security.authorizer.AclAuthorizer | server.properties |
+
+#### 10. Kafka Controller (KRaft Mode Configs)
+For KRaft (controller quorum, no ZooKeeper).
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| process.roles | Roles for the node (broker, controller, or both). | Defines node function in KRaft; simplifies setup. | broker | broker,controller | kraft/server.properties |
+| controller.quorum.voters | List of controller nodes for quorum (ID@host:port). | Enables leader election; fault-tolerant metadata management. | none | 1@kafka1:9093 | kraft/server.properties |
+| node.id | Unique ID for the node in KRaft. | Replaces broker.id in KRaft; for cluster identification. | none | 1 | kraft/server.properties |
+| controller.listener.names | Listener names for controller communication. | Separates controller traffic; secures metadata. | none | CONTROLLER | kraft/server.properties |
+
+#### 11. Additional Useful Configurations
+Miscellaneous for performance, quotas, etc.
+
+| Parameter | Description | Why It Matters/How It Helps | Default Value | Example Value | Where to Set It |
+|-----------|-------------|-----------------------------|---------------|---------------|-----------------|
+| message.max.bytes | Max message size across the cluster. | Consistent with topic/producer; handles large events. | 1000012 | 1048576 | server.properties |
+| log.flush.interval.messages | Flush logs to disk after this many messages. | Improves durability but reduces performance; use sparingly. | Long.MAX_VALUE | 1000 | server.properties |
+| leader.imbalance.check.interval.seconds | Interval (s) to check and rebalance partition leaders. | Evens load across brokers; improves scalability. | 300 | 300 | server.properties |
+| quota.consumer.default | Default consumer fetch quota (bytes/s). | Throttles clients; prevents overload. | Long.MAX_VALUE | 1048576 | server.properties |
+| quota.producer.default | Default producer produce quota (bytes/s). | Similar throttling. | Long.MAX_VALUE | 1048576 | server.properties |
+| metrics.sample.window.ms | Window (ms) for metrics sampling. | Affects monitoring accuracy. | 30000 | 30000 | server.properties |
+| metric.reporters | List of metric reporter classes (e.g., for Prometheus). | Exports metrics; essential for monitoring. | [] | org.apache.kafka.common.metrics.JmxReporter | server.properties |
+
+#### 12. Where Configuration Files Are Located and How Kafka Reads Them
+- **Broker**: server.properties (or kraft/server.properties) in $KAFKA_HOME/config/ (e.g., /opt/kafka/config/server.properties). Loaded at startup.
+- **Producer**: producer.properties in $KAFKA_HOME/config/. Loaded when producer app starts.
+- **Consumer**: consumer.properties in $KAFKA_HOME/config/. Loaded when consumer app starts.
+- **Topic Configs**: Stored in cluster metadata (not files); set/altered via kafka-configs.sh. Applied immediately (dynamic).
+- **ZooKeeper (legacy)**: zookeeper.properties in $KAFKA_HOME/config/; for old setups.
+- **How Kafka Reads Configs**: Brokers load at start (restart needed for static changes). Dynamic (e.g., topic) apply instantly. Clients (producer/consumer) load per instance. Verify with logs or kafka-configs.sh --describe.
+
+### Compiled Configuration Files
+Here, I've compiled all the parameters above into example production-ready files. These use the example values provided, tuned for a balanced setup (high throughput, fault tolerance, scalability). For a 3-broker cluster, create server1.properties, server2.properties, etc., changing broker.id/node.id.
+
+<details>
+    <summary>Click to view Configuration Files</summary>
+
+
+**A. Broker Config File: /opt/kafka/config/server.properties** (For ZooKeeper mode; for KRaft, use kraft/server.properties and add KRaft params)
+```
+# Broker Basics
+broker.id=1
+listeners=PLAINTEXT://0.0.0.0:9092
+advertised.listeners=PLAINTEXT://kafka1:9092
+log.dirs=/var/lib/kafka/data
+num.partitions=3
+default.replication.factor=3
+min.insync.replicas=2
+auto.create.topics.enable=false
+delete.topic.enable=true
+controlled.shutdown.enable=true
+unclean.leader.election.enable=false
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+
+# Log + Retention
+log.retention.hours=168
+log.retention.bytes=1073741824
+log.retention.check.interval.ms=300000
+log.segment.bytes=1073741824
+log.segment.ms=604800000
+log.cleanup.policy=delete
+log.cleaner.enable=true
+log.cleaner.threads=2
+log.cleaner.io.buffer.size=524288
+
+# Replication
+replica.lag.time.max.ms=30000
+replica.fetch.max.bytes=1048576
+replica.fetch.wait.max.ms=500
+replica.fetch.min.bytes=1
+
+# Networking (already included above)
+
+# Security
+security.inter.broker.protocol=SASL_SSL
+ssl.keystore.location=/etc/kafka/keystore.jks
+ssl.truststore.location=/etc/kafka/truststore.jks
+sasl.mechanism.inter.broker.protocol=PLAIN
+authorizer.class.name=kafka.security.authorizer.AclAuthorizer
+
+# Additional
+message.max.bytes=1048576
+log.flush.interval.messages=1000
+leader.imbalance.check.interval.seconds=300
+quota.consumer.default=1048576
+quota.producer.default=1048576
+metrics.sample.window.ms=30000
+metric.reporters=org.apache.kafka.common.metrics.JmxReporter
+```
+
+**B. KRaft Additions: If using KRaft, add to /opt/kafka/config/kraft/server.properties**
+```
+process.roles=broker,controller
+controller.quorum.voters=1@kafka1:9093
+node.id=1
+controller.listener.names=CONTROLLER
+```
+
+**C. Producer Config File: /opt/kafka/config/producer.properties**
+```
+# Reliability
+acks=all
+retries=10
+retry.backoff.ms=100
+enable.idempotence=true
+max.in.flight.requests.per.connection=1
+
+# Performance
+batch.size=32768
+linger.ms=5
+compression.type=snappy
+buffer.memory=33554432
+max.request.size=1048576
+
+# Partitioning
+partitioner.class=org.apache.kafka.clients.producer.RoundRobinPartitioner
+key.serializer=org.apache.kafka.common.serialization.StringSerializer
+value.serializer=org.apache.kafka.common.serialization.JsonSerializer
+
+# Networking (if needed, add socket buffers here)
+```
+
+**D. Consumer Config File: /opt/kafka/config/consumer.properties**
+```
+# Offsets & Group
+group.id=inventory-service
+enable.auto.commit=false
+auto.offset.reset=earliest
+isolation.level=read_committed
+
+# Polling & Rebalancing
+max.poll.records=500
+max.poll.interval.ms=300000
+session.timeout.ms=10000
+heartbeat.interval.ms=3000
+partition.assignment.strategy=cooperative-sticky
+group.instance.id=inventory-1
+rebalance.timeout.ms=30000
+exclude.internal.topics=true
+
+# Fetch
+fetch.min.bytes=1
+fetch.max.bytes=52428800
+max.partition.fetch.bytes=1048576
+
+# Networking (if needed, add socket buffers here)
+```
+
+**E. Topic-Level Configs: Not in a file; apply via CLI**
+For your orders topic:
+```
+kafka-configs.sh --bootstrap-server localhost:9092 --entity-type topics --entity-name orders --alter --add-config retention.ms=604800000,retention.bytes=1073741824,cleanup.policy=compact,min.cleanable.dirty.ratio=0.1,segment.ms=3600000,segment.bytes=536870912,message.format.version=3.7,max.message.bytes=2000000,compression.type=snappy
+```
+This overrides defaults dynamically.
+
+**How to Use These Files**:
+- Place in /opt/kafka/config/ (or symlink from /etc/kafka/).
+- Start broker: `bin/kafka-server-start.sh /opt/kafka/config/server.properties`.
+- For producers/consumers: Pass `--producer.config /opt/kafka/config/producer.properties` in console tools, or load in app code.
+- Backup: Version control the files; export dynamic configs with `kafka-configs.sh --describe > backup.properties`.
+
+</details>
