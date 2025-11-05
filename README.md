@@ -694,7 +694,7 @@ These control snapshots, filtering, data handling, etc. Grouped by category.
 
 </details>
 
-## Debezium Setup
+## Debezium Setup in Local
 
 <details>
     <summary>Click to viewthe setup</summary>
@@ -833,6 +833,70 @@ Apache Kafka is a **distributed event-streaming platform** used to build real-ti
 It solves the problems of tight coupling, slow synchronous communication, and bottlenecks in microservice architectures.
 
 Kafka acts as a **central event broker**, decoupling services so they can work independently and at their own pace.
+
+### Architecture
+```mermaid
+flowchart LR
+  subgraph ProducersLayer
+    P1[Order Service (Producer)]
+    P2[Mobile App / API Gateway]
+    P3[External Integrations]
+  end
+
+  subgraph KafkaCluster["Kafka Cluster (Brokers + Controller)"]
+    KTopicOrders[(orders topic)]
+    KTopicInventory[(inventory-updates topic)]
+    KTopicPayments[(payments topic)]
+  end
+
+  subgraph StreamProcessing
+    KS[Kafka Streams / Flink]
+    KSQL[ksqlDB]
+  end
+
+  subgraph ConsumersLayer
+    CInventory[Inventory Service (consumer group)]
+    CNotif[Notification Service (consumer group)]
+    CPayments[Payment Service (consumer group)]
+    CAnalytics[Analytics (batch & streaming consumers)]
+  end
+
+  subgraph Storage
+    DBOrders[(Orders DB)]
+    DBInventory[(Inventory DB)]
+    DataLake[(S3 / Data Lake)]
+  end
+
+  subgraph InfraOps
+    SchemaReg[Schema Registry]
+    Monitoring[Metrics / Logs / Traces]
+    Auth[AuthN / AuthZ (TLS, ACLs)]
+    Connect[Kafka Connectors]
+  end
+
+  P1 -->|produce order event| KTopicOrders
+  P2 -->|produce events| KTopicOrders
+  P3 -->|external events| KTopicPayments
+
+  KTopicOrders --> CInventory
+  KTopicOrders --> CNotif
+  KTopicOrders --> CPayments
+  KTopicOrders --> CAnalytics
+
+  KTopicOrders --> KS
+  KS -->|enriched events| KTopicInventory
+  KTopicInventory --> CInventory
+
+  Connect --> DataLake
+  KTopicOrders --> Connect
+  SchemaReg -->|schemas| P1 & CInventory & KS
+
+  CInventory --> DBInventory
+  CPayments --> DBOrders
+  CAnalytics --> DataLake
+  Monitoring --> KafkaCluster
+  Auth --> KafkaCluster
+```
 
 ### **2. Why Kafka? (Problem Before Kafka)**
 
@@ -1385,3 +1449,11 @@ This overrides defaults dynamically.
 - Backup: Version control the files; export dynamic configs with `kafka-configs.sh --describe > backup.properties`.
 
 </details>
+
+---
+
+
+
+
+
+
