@@ -1298,6 +1298,47 @@ Rules:
 * Adding more replicas scales processing.
 * If one consumer dies, Kafka reassigns its partition to another.
 
+<details>
+    <summary>Click to view consumer.properties</summary>
+
+```
+[kafka@kafka config]$ ls
+broker.properties                  connect-distributed.properties  connect-log4j2.yaml              consumer.properties    log4j2.yaml          tools-log4j2.yaml
+connect-console-sink.properties    connect-file-sink.properties    connect-mirror-maker.properties  controller.properties  producer.properties  trogdor.conf
+connect-console-source.properties  connect-file-source.properties  connect-standalone.properties    log4j.properties       server.properties
+[kafka@kafka config]$ cat consumer.properties 
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+# 
+#    http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# see org.apache.kafka.clients.consumer.ConsumerConfig for more details
+
+# list of brokers used for bootstrapping knowledge about the rest of the cluster
+# format: host1:port1,host2:port2 ...
+bootstrap.servers=localhost:9092
+
+# consumer group id
+group.id=test-consumer-group
+
+# What to do when there is no initial offset in Kafka or if the current
+# offset does not exist any more on the server: latest, earliest, none
+#auto.offset.reset=
+[kafka@kafka config]$ 
+```
+    
+</details>
+
+
 ### **10. Kafka Brokers**
 
 A **broker** is a Kafka server that:
