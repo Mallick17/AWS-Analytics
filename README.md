@@ -2519,6 +2519,63 @@ Configuration:
 | **Logging**               | `log4j.properties`, `log4j2.yaml`, `connect-log4j2.yaml`, `tools-log4j2.yaml` |
 | **Testing / Tools**       | `trogdor.conf`                                                                |
 
+```mermaid
+flowchart TD
+
+subgraph Brokers["Kafka Brokers / Cluster"]
+    BrokerProps[broker.properties / server.properties]
+    ControllerProps[controller.properties]
+end
+
+subgraph Clients["Kafka Clients"]
+    ProducerProps[producer.properties]
+    ConsumerProps[consumer.properties]
+end
+
+subgraph Connect["Kafka Connect Workers"]
+    StandaloneProps[connect-standalone.properties]
+    DistributedProps[connect-distributed.properties]
+    FileSourceProps[connect-file-source.properties]
+    FileSinkProps[connect-file-sink.properties]
+    ConsoleSourceProps[connect-console-source.properties]
+    ConsoleSinkProps[connect-console-sink.properties]
+    MirrorMakerProps[connect-mirror-maker.properties]
+end
+
+subgraph Logging["Logging Configs (Log4j2)"]
+    Log4j2[log4j2.yaml]
+    ConnectLog[connect-log4j2.yaml]
+    ToolsLog[tools-log4j2.yaml]
+    LegacyLog[log4j.properties]
+end
+
+subgraph Tools["Benchmark / Test Tools"]
+    Trogdor[trogdor.conf]
+end
+
+%% Connections
+BrokerProps --> Brokers
+ControllerProps --> Brokers
+
+ProducerProps --> Clients
+ConsumerProps --> Clients
+
+StandaloneProps --> Connect
+DistributedProps --> Connect
+FileSourceProps --> Connect
+FileSinkProps --> Connect
+ConsoleSourceProps --> Connect
+ConsoleSinkProps --> Connect
+MirrorMakerProps --> Connect
+
+Log4j2 --> Brokers
+ConnectLog --> Connect
+ToolsLog --> Clients
+LegacyLog --> Brokers & Clients
+
+Trogdor --> Brokers
+```
+
 <details>
     <summary>Click to view All the Configurations and their Parameters</summary>
 
