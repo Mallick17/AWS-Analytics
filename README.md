@@ -2522,59 +2522,163 @@ Configuration:
 ```mermaid
 flowchart TD
 
-subgraph Brokers["Kafka Brokers / Cluster"]
-    BrokerProps[broker.properties / server.properties]
-    ControllerProps[controller.properties]
+%% Producers Layer
+subgraph Producers["Kafka Producers"]
+    Prod1[Producer 1]
+    Prod2[Producer 2]
+    Prod1Config["Config: producer.properties"]
+    Prod2Config["Config: producer.properties"]
 end
 
-subgraph Clients["Kafka Clients"]
-    ProducerProps[producer.properties]
-    ConsumerProps[consumer.properties]
+%% Consumers Layer
+subgraph Consumers["Kafka Consumers"]
+    Cons1[Consumer 1]
+    Cons2[Consumer 2]
+    ConsConfig["Config: consumer.properties"]
 end
 
-subgraph Connect["Kafka Connect Workers"]
-    StandaloneProps[connect-standalone.properties]
-    DistributedProps[connect-distributed.properties]
-    FileSourceProps[connect-file-source.properties]
-    FileSinkProps[connect-file-sink.properties]
-    ConsoleSourceProps[connect-console-source.properties]
-    ConsoleSinkProps[connect-console-sink.properties]
-    MirrorMakerProps[connect-mirror-maker.properties]
+%% Kafka Connect Layer
+subgraph Connect["Kafka Connect"]
+    Standalone[Standalone Worker]
+    Distributed[Distributed Worker]
+    FileSource[File Source Connector]
+    FileSink[File Sink Connector]
+    MirrorMaker[MirrorMaker Connector]
+    
+    StandaloneConfig["connect-standalone.properties"]
+    DistributedConfig["connect-distributed.properties"]
+    FileSourceConfig["connect-file-source.properties"]
+    FileSinkConfig["connect-file-sink.properties"]
+    MirrorMakerConfig["connect-mirror-maker.properties"]
 end
 
-subgraph Logging["Logging Configs (Log4j2)"]
+%% Kafka Brokers / Cluster
+subgraph KafkaCluster["Kafka Cluster (3 Brokers)"]
+    Broker1[Broker 1]
+    Broker2[Broker 2]
+    Broker3[Broker 3]
+    
+    BrokerConfig["broker.properties / server.properties"]
+    ControllerConfig["controller.properties (KRaft mode)"]
+end
+
+%% Topics and Partitions
+subgraph Topics["Topics & Partitions"]
+    TopicA1["Topic-A Partition 0 (Leader: B1)"]
+    TopicA2["Topic-A Partition 1 (Leader: B2)"]
+    TopicA3["Topic-A Partition 2 (Leader: B3)"]
+    
+    TopicB1["Topic-B Partition 0 (Leader: B2)"]
+    TopicB2["Topic-B Partition 1 (Leader: B3)"]
+end
+
+%% Logging
+subgraph Logging["Logging Configs"]
     Log4j2[log4j2.yaml]
     ConnectLog[connect-log4j2.yaml]
     ToolsLog[tools-log4j2.yaml]
     LegacyLog[log4j.properties]
 end
 
-subgraph Tools["Benchmark / Test Tools"]
-    Trogdor[trogdor.conf]
-end
+%% Benchmark / Test
+Trogdor[trogdor.conf]
 
-%% Connections
-BrokerProps --> Brokers
-ControllerProps --> Brokers
+%% Connections: Producers -> Kafka
+Prod1 -->|Send events| TopicA1
+Prod2 -->|Send events| TopicA2
+Prod2 -->|Send events| TopicB1
+Prod1Config --> Prod1
+Prod2Config --> Prod2
 
-ProducerProps --> Clients
-ConsumerProps --> Clients
+%% Kafka Topics -> Consumers
+TopicA1 --> Cons1
+TopicA2 --> Cons1
+TopicB1 --> Cons2
+TopicB2 --> Cons2
+ConsConfig --> Cons1
+ConsConfig --> Cons2
 
-StandaloneProps --> Connect
-DistributedProps --> Connect
-FileSourceProps --> Connect
-FileSinkProps --> Connect
-ConsoleSourceProps --> Connect
-ConsoleSinkProps --> Connect
-MirrorMakerProps --> Connect
+%% Kafka Connect -> Kafka Topics
+FileSource --> TopicA3
+FileSourceConfig --> FileSource
+FileSink --> TopicB2
+FileSinkConfig --> FileSink
+MirrorMaker --> TopicA1
+MirrorMakerConfig --> MirrorMaker
+Standalone --> FileSource
+StandaloneConfig --> Standalone
+Distributed --> FileSink
+DistributedConfig --> Distributed
 
-Log4j2 --> Brokers
-ConnectLog --> Connect
-ToolsLog --> Clients
-LegacyLog --> Brokers & Clients
+%% Kafka Brokers & Cluster
+TopicA1 --> Broker1
+TopicA2 --> Broker2
+TopicA3 --> Broker3
+TopicB1 --> Broker2
+TopicB2 --> Broker3
+BrokerConfig --> Broker1
+BrokerConfig --> Broker2
+BrokerConfig --> Broker3
+ControllerConfig --> Broker1
+ControllerConfig --> Broker2
+ControllerConfig --> Broker3
 
-Trogdor --> Brokers
+%% Logging Connections
+Log4j2 --> Broker1
+Log4j2 --> Broker2
+Log4j2 --> Broker3
+ConnectLog --> Standalone
+ConnectLog --> Distributed
+ToolsLog --> Prod1
+ToolsLog --> Prod2
+ToolsLog --> Cons1
+ToolsLog --> Cons2
+LegacyLog --> Broker1
+LegacyLog --> Broker2
+LegacyLog --> Broker3
+
+%% Benchmark / Trogdor
+Trogdor --> Broker1
+Trogdor --> Broker2
+Trogdor --> Broker3
 ```
+
+### How to read this diagram
+
+1. **Producers** send events to **Kafka topics / partitions**.
+
+   * Config used: `producer.properties`.
+
+2. **Brokers** store partitions and replicate them to other brokers for **high availability**.
+
+   * Config used: `broker.properties` / `server.properties`.
+   * KRaft mode controller config: `controller.properties`.
+
+3. **Consumers** read events from partitions.
+
+   * Config used: `consumer.properties`.
+   * Consumer group coordination ensures **one consumer per partition per group**.
+
+4. **Kafka Connect** moves data in/out of Kafka.
+
+   * Standalone / distributed mode uses `connect-*.properties`.
+   * Connectors (file, console, MirrorMaker) each have their own configs.
+
+5. **Logging**:
+
+   * Brokers: `log4j2.yaml` or legacy `log4j.properties`.
+   * Connect workers: `connect-log4j2.yaml`.
+   * CLI tools: `tools-log4j2.yaml`.
+
+6. **Testing / Benchmark**:
+
+   * Trogdor runs fault injection/load tests using `trogdor.conf`.
+
+7. **Topics & Partitions Example**:
+
+   * Topic-A has 3 partitions, leaders spread across 3 brokers.
+   * Topic-B has 2 partitions, leaders on Broker2 and Broker3.
+   * Replication (not explicitly drawn) ensures follower replicas exist on other brokers.
 
 <details>
     <summary>Click to view All the Configurations and their Parameters</summary>
