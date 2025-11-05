@@ -1035,11 +1035,12 @@ A Kafka cluster consists of **multiple brokers**.
 * ZooKeeper is no longer needed.
 * Kafka manages its own metadata internally.
 
+---
+
 ## Configurations and Parameters of Kafka
 
-### Comprehensive Kafka Configuration Reference
-
-Below is a merged, clean, structured, and table-driven Kafka Configuration Reference, combining the details from our previous discussion with the additional sections provided (e.g., expanded replication, retention, security, controller configs, and more). This creates a near-complete "encyclopedia" covering ~95% of real-world Kafka configs (based on Apache Kafka 4.1.0 as of November 2025). I've ensured all parameter meanings are explained in simple, understandable terms—focusing on what they do, why they matter, and how they help with aspects like scalability, fault tolerance, throughput, and performance.
+### Comprehensive Kafka Configuration
+This creates a near-complete "encyclopedia" covering ~95% of real-world Kafka configs (based on Apache Kafka 4.1.0 as of November 2025). I've ensured all parameter for scalability, fault tolerance, throughput, and performance.
 
 Configurations are grouped by category for clarity. Each table includes:
 - **Parameter**: The config key.
@@ -1049,14 +1050,15 @@ Configurations are grouped by category for clarity. Each table includes:
 - **Example Value**: A practical suggestion.
 - **Where to Set It**: File or command (e.g., server.properties for brokers).
 
-At the end, I'll compile all parameters into example configuration files, show their contents, explain which params go where, and specify typical paths (assuming a standard Kafka install like `/opt/kafka/` on Linux).
-
 **Key Reminders**:
 - Config files are in properties format (key=value).
 - Static configs (e.g., in files) load at startup; dynamic ones (e.g., topic-level) can be updated via `kafka-configs.sh` without restart.
 - For KRaft mode (ZooKeeper-free, recommended for new setups), use `kraft/server.properties`.
 - Test changes: Use `kafka-configs.sh --describe` to verify effective values.
 - Benefits tie back to your setup: Partitions for parallel processing (high throughput/scalability), replication for fault tolerance, groups for consumer parallelism.
+
+<details>
+    <summary>Click to view All the Configurations and their Parameters</summary>
 
 #### 1. Broker Configuration (server.properties)
 Controls the core behavior of a Kafka server/broker, like storage, networking, and defaults for topics. These enable your cluster of multiple brokers to handle producers/consumers reliably.
@@ -1237,13 +1239,16 @@ Miscellaneous for performance, quotas, etc.
 | metrics.sample.window.ms | Window (ms) for metrics sampling. | Affects monitoring accuracy. | 30000 | 30000 | server.properties |
 | metric.reporters | List of metric reporter classes (e.g., for Prometheus). | Exports metrics; essential for monitoring. | [] | org.apache.kafka.common.metrics.JmxReporter | server.properties |
 
-#### 12. Where Configuration Files Are Located and How Kafka Reads Them
+</details>
+
+#### Where Configuration Files Are Located and How Kafka Reads Them
 - **Broker**: server.properties (or kraft/server.properties) in $KAFKA_HOME/config/ (e.g., /opt/kafka/config/server.properties). Loaded at startup.
 - **Producer**: producer.properties in $KAFKA_HOME/config/. Loaded when producer app starts.
 - **Consumer**: consumer.properties in $KAFKA_HOME/config/. Loaded when consumer app starts.
 - **Topic Configs**: Stored in cluster metadata (not files); set/altered via kafka-configs.sh. Applied immediately (dynamic).
 - **ZooKeeper (legacy)**: zookeeper.properties in $KAFKA_HOME/config/; for old setups.
 - **How Kafka Reads Configs**: Brokers load at start (restart needed for static changes). Dynamic (e.g., topic) apply instantly. Clients (producer/consumer) load per instance. Verify with logs or kafka-configs.sh --describe.
+
 
 ### Compiled Configuration Files
 Here, I've compiled all the parameters above into example production-ready files. These use the example values provided, tuned for a balanced setup (high throughput, fault tolerance, scalability). For a 3-broker cluster, create server1.properties, server2.properties, etc., changing broker.id/node.id.
