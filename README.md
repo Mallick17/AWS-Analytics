@@ -835,6 +835,26 @@ It solves the problems of tight coupling, slow synchronous communication, and bo
 Kafka acts as a **central event broker**, decoupling services so they can work independently and at their own pace.
 
 ### Architecture
+
+<details>
+    <summary>Click to view Data flow patterns</summary>
+
+### Data flow patterns
+- "Event-driven integration" (fan-out)
+  - Producer → Topic → Multiple consumer services (Notification, Inventory, Analytics).
+  - Use: decouples services; consumers can be added without touching the producer.
+
+- "Materialized view" (stateful stream processing)
+  - Orders topic → Kafka Streams join with Inventory topic → maintain aggregated store (local RocksDB) → expose via REST or Kafka topic.
+
+- "Event sourcing" vs "Change data capture (CDC)"
+  - Event Sourcing: write domain events to Kafka as the source of truth.
+  - CDC (Debezium): capture DB changes into Kafka topics and stream them to downstream systems.
+
+- "Exactly-once processing"
+  - Use Kafka transactions + idempotent producers + careful commit protocol in consumers/streams (Kafka Streams supports EOS).
+    
+
 ```mermaid
 flowchart LR
 
@@ -904,6 +924,7 @@ MC --> KafkaCluster
 SEC --> KafkaCluster
 ```
 
+</details>
 
 ```mermaid
 flowchart LR
