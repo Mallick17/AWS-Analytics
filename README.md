@@ -837,65 +837,71 @@ Kafka acts as a **central event broker**, decoupling services so they can work i
 ### Architecture
 ```mermaid
 flowchart LR
-  subgraph ProducersLayer
-    P1[Order Service (Producer)]
-    P2[Mobile App / API Gateway]
-    P3[External Integrations]
-  end
 
-  subgraph KafkaCluster["Kafka Cluster (Brokers + Controller)"]
-    KTopicOrders[(orders topic)]
-    KTopicInventory[(inventory-updates topic)]
-    KTopicPayments[(payments topic)]
-  end
+subgraph Producers
+  P1[Order Service]
+  P2[API Gateway]
+  P3[External Integrations]
+end
 
-  subgraph StreamProcessing
-    KS[Kafka Streams / Flink]
-    KSQL[ksqlDB]
-  end
+subgraph KafkaCluster[Kafka Cluster]
+  OTopic[(orders)]
+  PTopic[(payments)]
+  ITopic[(inventory-updates)]
+end
 
-  subgraph ConsumersLayer
-    CInventory[Inventory Service (consumer group)]
-    CNotif[Notification Service (consumer group)]
-    CPayments[Payment Service (consumer group)]
-    CAnalytics[Analytics (batch & streaming consumers)]
-  end
+subgraph Processing[Stream Processing]
+  KS[Kafka Streams / Flink]
+  KSQL[ksqlDB]
+end
 
-  subgraph Storage
-    DBOrders[(Orders DB)]
-    DBInventory[(Inventory DB)]
-    DataLake[(S3 / Data Lake)]
-  end
+subgraph Consumers
+  C1[Inventory Service]
+  C2[Notification Service]
+  C3[Payment Service]
+  C4[Analytics Pipeline]
+end
 
-  subgraph InfraOps
-    SchemaReg[Schema Registry]
-    Monitoring[Metrics / Logs / Traces]
-    Auth[AuthN / AuthZ (TLS, ACLs)]
-    Connect[Kafka Connectors]
-  end
+subgraph Storage
+  DB1[(Orders DB)]
+  DB2[(Inventory DB)]
+  Lake[(S3 / Data Lake)]
+end
 
-  P1 -->|produce order event| KTopicOrders
-  P2 -->|produce events| KTopicOrders
-  P3 -->|external events| KTopicPayments
+subgraph Infra[Infra & Governance]
+  SR[Schema Registry]
+  MC[Monitoring]
+  SEC[Security / ACLs]
+  CONNECT[Kafka Connect]
+end
 
-  KTopicOrders --> CInventory
-  KTopicOrders --> CNotif
-  KTopicOrders --> CPayments
-  KTopicOrders --> CAnalytics
+P1 --> OTopic
+P2 --> OTopic
+P3 --> PTopic
 
-  KTopicOrders --> KS
-  KS -->|enriched events| KTopicInventory
-  KTopicInventory --> CInventory
+OTopic --> C1
+OTopic --> C2
+OTopic --> C3
+OTopic --> C4
 
-  Connect --> DataLake
-  KTopicOrders --> Connect
-  SchemaReg -->|schemas| P1 & CInventory & KS
+OTopic --> KS
+KS --> ITopic
+ITopic --> C1
 
-  CInventory --> DBInventory
-  CPayments --> DBOrders
-  CAnalytics --> DataLake
-  Monitoring --> KafkaCluster
-  Auth --> KafkaCluster
+CONNECT --> Lake
+OTopic --> CONNECT
+
+C1 --> DB2
+C3 --> DB1
+
+C4 --> Lake
+
+SR --> P1
+SR --> C1
+SR --> KS
+
+MC --> KafkaCluster
+SEC --> KafkaCluster
 ```
 
 ### **2. Why Kafka? (Problem Before Kafka)**
