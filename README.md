@@ -1126,6 +1126,92 @@ SEC --> KafkaCluster
 
 </details>
 
+```mermaid
+flowchart TD
+
+%% ============================
+%% PRODUCERS + PRODUCER PARTITIONS
+%% ============================
+subgraph Producers["Producers & Producer Partitioning"]
+    Prod1[Producer 1]
+    Prod2[Producer 2]
+    Prod3[Producer 3]
+
+    %% Producer Partitioning Decisions
+    PP1["Producer Partition Decision → P0 (Key: user123)"]
+    PP2["Producer Partition Decision → P1 (Key: user987)"]
+    PP3["Producer Partition Decision → P2 (Round Robin)"]
+
+    Prod1 --> PP1
+    Prod2 --> PP2
+    Prod3 --> PP3
+end
+
+%% ============================
+%% TOPIC PARTITIONS
+%% ============================
+subgraph TopicLayer["Topic: orders (3 Partitions)"]
+    TP0["Topic Partition 0"]
+    TP1["Topic Partition 1"]
+    TP2["Topic Partition 2"]
+end
+
+%% Map producer partition decisions to actual topic partitions
+PP1 --> TP0
+PP2 --> TP1
+PP3 --> TP2
+
+%% ============================
+%% BROKER PARTITIONS
+%% ============================
+subgraph BrokerLayer["Broker Storage (Leaders Only)"]
+    BP0["Broker 1 → Partition 0 Leader"]
+    BP1["Broker 2 → Partition 1 Leader"]
+    BP2["Broker 3 → Partition 2 Leader"]
+end
+
+TP0 --> BP0
+TP1 --> BP1
+TP2 --> BP2
+
+%% ============================
+%% CONSUMER GROUP
+%% ============================
+subgraph Consumers["Consumer Group CG-Orders"]
+    C1["Consumer 1 (Assigned Partition 0)"]
+    C2["Consumer 2 (Assigned Partition 1)"]
+    C3["Consumer 3 (Assigned Partition 2)"]
+end
+
+BP0 --> C1
+BP1 --> C2
+BP2 --> C3
+
+%% ============================
+%% 2-3 EXAMPLE DATA FLOWS
+%% ============================
+
+%% FLOW 1
+Prod1 -. "event: {user123, purchase}" .-> PP1
+PP1 -.-> TP0
+TP0 -.-> BP0
+BP0 -.-> C1
+
+%% FLOW 2
+Prod2 -. "event: {user987, refund}" .-> PP2
+PP2 -.-> TP1
+TP1 -.-> BP1
+BP1 -.-> C2
+
+%% FLOW 3
+Prod3 -. "event: {no-key, heartbeat}" .-> PP3
+PP3 -.-> TP2
+TP2 -.-> BP2
+BP2 -.-> C3
+
+```
+
+
 <details>
     <summary>Click to view the Architecture</summary>
 
