@@ -456,9 +456,9 @@ end
 %% DEBEZIUM CONNECT WORKERS
 %% ============================
 subgraph DebeziumWorkers["Debezium Connect Workers"]
-    DW1[Debezium Worker(Producer) 1 → MySQL Connector]
-    DW2[Debezium Worker(Producer) 2 → Postgres Connector]
-    DW3[Debezium Worker(Producer) 3 → MySQL Connector]
+    DW1[Debezium Worker aka Producer 1 → MySQL Connector]
+    DW2[Debezium Worker aka Producer 2 → Postgres Connector]
+    DW3[Debezium Worker aka Producer 3 → MySQL Connector]
 
     DW1Config["mysql-connector.properties"]
     DW2Config["postgres-connector.properties"]
