@@ -1130,17 +1130,16 @@ SEC --> KafkaCluster
 flowchart TD
 
 %% ============================
-%% PRODUCERS + PRODUCER PARTITIONS
+%% PRODUCER LAYER + PARTITIONER
 %% ============================
-subgraph Producers["Producers & Producer Partitioning"]
+subgraph Producers["Producers & Producer Partition Decisions"]
     Prod1[Producer 1]
     Prod2[Producer 2]
     Prod3[Producer 3]
 
-    %% Producer Partitioning Decisions
-    PP1["Producer Partition Decision → P0 (Key: user123)"]
-    PP2["Producer Partition Decision → P1 (Key: user987)"]
-    PP3["Producer Partition Decision → P2 (Round Robin)"]
+    PP1["Partitioner → Chooses Partition 0 (Key: user123)"]
+    PP2["Partitioner → Chooses Partition 1 (Key: user987)"]
+    PP3["Partitioner → Chooses Partition 2 (Round Robin)"]
 
     Prod1 --> PP1
     Prod2 --> PP2
@@ -1156,59 +1155,103 @@ subgraph TopicLayer["Topic: orders (3 Partitions)"]
     TP2["Topic Partition 2"]
 end
 
-%% Map producer partition decisions to actual topic partitions
 PP1 --> TP0
 PP2 --> TP1
 PP3 --> TP2
 
 %% ============================
-%% BROKER PARTITIONS
+%% BROKER LAYER (LEADER + REPLICAS)
 %% ============================
-subgraph BrokerLayer["Broker Storage (Leaders Only)"]
-    BP0["Broker 1 → Partition 0 Leader"]
-    BP1["Broker 2 → Partition 1 Leader"]
-    BP2["Broker 3 → Partition 2 Leader"]
+subgraph BrokerLayer["Kafka Brokers (Leader + Replicas)"]
+    %% Leaders
+    BP0L["Broker 1 → P0 (Leader)"]
+    BP1L["Broker 2 → P1 (Leader)"]
+    BP2L["Broker 3 → P2 (Leader)"]
+
+    %% Replicas
+    BP0R2["Broker 2 → P0 Replica"]
+    BP0R3["Broker 3 → P0 Replica"]
+
+    BP1R1["Broker 1 → P1 Replica"]
+    BP1R3["Broker 3 → P1 Replica"]
+
+    BP2R1["Broker 1 → P2 Replica"]
+    BP2R2["Broker 2 → P2 Replica"]
 end
 
-TP0 --> BP0
-TP1 --> BP1
-TP2 --> BP2
+TP0 --> BP0L
+TP1 --> BP1L
+TP2 --> BP2L
+
+%% Replication
+BP0L -.replicates.-> BP0R2
+BP0L -.replicates.-> BP0R3
+
+BP1L -.replicates.-> BP1R1
+BP1L -.replicates.-> BP1R3
+
+BP2L -.replicates.-> BP2R1
+BP2L -.replicates.-> BP2R2
 
 %% ============================
-%% CONSUMER GROUP
+%% CONSUMER GROUP 1
 %% ============================
-subgraph Consumers["Consumer Group CG-Orders"]
-    C1["Consumer 1 (Assigned Partition 0)"]
-    C2["Consumer 2 (Assigned Partition 1)"]
-    C3["Consumer 3 (Assigned Partition 2)"]
+subgraph CG1["Consumer Group CG-Orders"]
+    C1A["CG1 - Consumer A (Assigned P0)"]
+    C1B["CG1 - Consumer B (Assigned P1)"]
+    C1C["CG1 - Consumer C (Assigned P2)"]
 end
 
-BP0 --> C1
-BP1 --> C2
-BP2 --> C3
+BP0L --> C1A
+BP1L --> C1B
+BP2L --> C1C
 
 %% ============================
-%% 2-3 EXAMPLE DATA FLOWS
+%% CONSUMER GROUP 2 (Independent)
+%% ============================
+subgraph CG2["Consumer Group CG-Analytics"]
+    C2A["CG2 - Consumer A (Assigned P0)"]
+    C2B["CG2 - Consumer B (Assigned P1)"]
+    C2C["CG2 - Consumer C (Assigned P2)"]
+end
+
+BP0L --> C2A
+BP1L --> C2B
+BP2L --> C2C
+
+%% ============================
+%% REBALANCE
+%% ============================
+subgraph Rebalance["When a Consumer Joins/Leaves"]
+    R1["Rebalancer Reassigns Partitions"]
+    NewConsumer["New Consumer Joins"]
+end
+
+C1A -.triggers rebalance.-> R1
+C1C -.triggers rebalance.-> R1
+R1 --> NewConsumer
+
+%% ============================
+%% DATA FLOWS (3 Examples)
 %% ============================
 
 %% FLOW 1
 Prod1 -. "event: {user123, purchase}" .-> PP1
 PP1 -.-> TP0
-TP0 -.-> BP0
-BP0 -.-> C1
+TP0 -.-> BP0L
+BP0L -.-> C1A
 
 %% FLOW 2
 Prod2 -. "event: {user987, refund}" .-> PP2
 PP2 -.-> TP1
-TP1 -.-> BP1
-BP1 -.-> C2
+TP1 -.-> BP1L
+BP1L -.-> C1B
 
 %% FLOW 3
-Prod3 -. "event: {no-key, heartbeat}" .-> PP3
+Prod3 -. "event: {no-key}" .-> PP3
 PP3 -.-> TP2
-TP2 -.-> BP2
-BP2 -.-> C3
-
+TP2 -.-> BP2L
+BP2L -.-> C1C
 ```
 
 
