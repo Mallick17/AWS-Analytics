@@ -443,68 +443,56 @@ The Debezium MySQL connector captures row-level changes from MySQL databases (in
 ```mermaid
 flowchart TD
 
-%% Source Databases
+%% ============================
+%% SOURCE DATABASES
+%% ============================
 subgraph SourceDB["Source Databases"]
     MySQLDB[MySQL Database]
     PostgresDB[PostgreSQL Database]
-    DBConfig["DB Credentials / JDBC URL"]
+    DBConfig["DB Credentials / JDBC URLs"]
 end
 
-%% Debezium Connect Workers
-subgraph Debezium["Debezium Kafka Connect Workers"]
+%% ============================
+%% DEBEZIUM CONNECT WORKERS
+%% ============================
+subgraph DebeziumWorkers["Debezium Connect Workers"]
     Standalone[Standalone Worker]
     Distributed[Distributed Worker]
     StandaloneConfig["connect-standalone.properties"]
     DistributedConfig["connect-distributed.properties"]
 end
 
-%% Debezium Connectors
+%% ============================
+%% DEBEZIUM CONNECTORS
+%% ============================
 subgraph Connectors["Debezium Connectors"]
     MySQLConnector[MySQL CDC Connector]
     PostgresConnector[Postgres CDC Connector]
-    ConnectorConfig1["connector properties file: mysql-connector.properties"]
-    ConnectorConfig2["connector properties file: postgres-connector.properties"]
+    ConnectorConfig1["mysql-connector.properties"]
+    ConnectorConfig2["postgres-connector.properties"]
 end
 
-%% Kafka Cluster
-subgraph KafkaCluster["Kafka Cluster (3 Brokers)"]
-    Broker1[Broker 1]
-    Broker2[Broker 2]
-    Broker3[Broker 3]
-    BrokerConfig["broker.properties / server.properties"]
-    ControllerConfig["controller.properties (KRaft mode)"]
+%% ============================
+%% KAFKA PRODUCER PARTITIONS
+%% ============================
+subgraph KafkaProducers["Kafka Producer Partitions"]
+    OrdersP0["orders topic - Partition 0"]
+    OrdersP1["orders topic - Partition 1"]
+    InventoryP0["inventory topic - Partition 0"]
+    InventoryP1["inventory topic - Partition 1"]
 end
 
-%% Kafka Topics
-subgraph Topics["Topics / Partitions"]
-    OrdersTopic["orders topic (Partitioned)"]
-    InventoryTopic["inventory topic (Partitioned)"]
-    PaymentsTopic["payments topic (Partitioned)"]
-end
+%% ============================
+%% CONNECTIONS
+%% ============================
 
-%% Consumers / Sinks
-subgraph Consumers["Consumers / Sinks"]
-    InventoryService[Inventory Service Consumer]
-    PaymentService[Payment Service Consumer]
-    Analytics[Analytics / Data Lake]
-    ConsumerConfig["consumer.properties / connector sink configs"]
-end
-
-%% Logging
-subgraph Logging["Logging Configs"]
-    Log4j2[log4j2.yaml]
-    ConnectLog[connect-log4j2.yaml]
-end
-
-%% Connections
-
-%% Source DB -> Debezium Connect
+%% Database -> Connectors
 MySQLDB --> MySQLConnector
 PostgresDB --> PostgresConnector
 DBConfig --> MySQLDB
 DBConfig --> PostgresDB
 
-%% Connector -> Connect Worker
+%% Connectors -> Workers
 MySQLConnector --> Standalone
 MySQLConnector --> Distributed
 PostgresConnector --> Standalone
@@ -514,45 +502,16 @@ ConnectorConfig2 --> PostgresConnector
 StandaloneConfig --> Standalone
 DistributedConfig --> Distributed
 
-%% Connect Workers -> Kafka
-Standalone --> OrdersTopic
-Distributed --> OrdersTopic
-Standalone --> InventoryTopic
-Distributed --> InventoryTopic
-Standalone --> PaymentsTopic
-Distributed --> PaymentsTopic
+%% Workers -> Kafka Producer Partitions
+Standalone --> OrdersP0
+Standalone --> OrdersP1
+Standalone --> InventoryP0
+Standalone --> InventoryP1
 
-%% Kafka Brokers
-OrdersTopic --> Broker1
-OrdersTopic --> Broker2
-InventoryTopic --> Broker2
-InventoryTopic --> Broker3
-PaymentsTopic --> Broker3
-PaymentsTopic --> Broker1
-BrokerConfig --> Broker1
-BrokerConfig --> Broker2
-BrokerConfig --> Broker3
-ControllerConfig --> Broker1
-ControllerConfig --> Broker2
-ControllerConfig --> Broker3
-
-%% Kafka Topics -> Consumers
-OrdersTopic --> InventoryService
-InventoryTopic --> InventoryService
-PaymentsTopic --> PaymentService
-OrdersTopic --> Analytics
-InventoryTopic --> Analytics
-PaymentsTopic --> Analytics
-ConsumerConfig --> InventoryService
-ConsumerConfig --> PaymentService
-ConsumerConfig --> Analytics
-
-%% Logging
-Log4j2 --> Broker1
-Log4j2 --> Broker2
-Log4j2 --> Broker3
-ConnectLog --> Standalone
-ConnectLog --> Distributed
+Distributed --> OrdersP0
+Distributed --> OrdersP1
+Distributed --> InventoryP0
+Distributed --> InventoryP1
 ```
 
 ### How to read this diagram
