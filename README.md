@@ -1110,6 +1110,51 @@ MC --> KafkaCluster
 SEC --> KafkaCluster
 ```
 
+- How it resumes from the Consumer to S3 Tables
+
+```mermaid
+flowchart TD
+
+%% ============================
+%% KAFKA CONSUMER GROUP
+%% ============================
+subgraph CGAnalytics["Consumer Group CG-Analytics"]
+    C2A["Consumer A (Assigned P0)"]
+    C2B["Consumer B (Assigned P1)"]
+    C2C["Consumer C (Assigned P2)"]
+end
+
+%% ============================
+%% KAFKA CONNECT S3 SINK
+%% ============================
+subgraph S3Sink["Kafka Connect S3 Sink Connector"]
+    S3Worker1["Worker 1 → S3 Sink Task"]
+    S3Worker2["Worker 2 → S3 Sink Task"]
+    S3Config["s3-sink-connector.properties"]
+end
+
+C2A --> S3Worker1
+C2B --> S3Worker1
+C2C --> S3Worker2
+
+S3Config --> S3Worker1
+S3Config --> S3Worker2
+
+%% ============================
+%% S3 TABLE / BUCKET
+%% ============================
+subgraph S3["AWS S3 / Data Lake"]
+    S3Orders["s3://bucket/orders/"]
+    S3Inventory["s3://bucket/inventory/"]
+end
+
+S3Worker1 --> S3Orders
+S3Worker1 --> S3Inventory
+S3Worker2 --> S3Orders
+S3Worker2 --> S3Inventory
+
+```
+
 </details>
 
 ```mermaid
