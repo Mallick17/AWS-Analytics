@@ -444,114 +444,62 @@ The Debezium MySQL connector captures row-level changes from MySQL databases (in
 flowchart TD
 
 %% ============================
-%% DEBEZIUM WORKERS (Act as Producers)
+%% SOURCE DATABASES
 %% ============================
-subgraph DebeziumProducers["Debezium Workers (Producers)"]
+subgraph SourceDB["Source Databases"]
+    MySQLDB[MySQL Database]
+    PostgresDB[PostgreSQL Database]
+    DBConfig["DB Credentials / JDBC URLs"]
+end
+
+%% ============================
+%% DEBEZIUM CONNECT WORKERS
+%% ============================
+subgraph DebeziumWorkers["Debezium Connect Workers (Producers)"]
     DW1[Debezium Worker 1 → MySQL Connector]
     DW2[Debezium Worker 2 → Postgres Connector]
     DW3[Debezium Worker 3 → MySQL Connector]
 
-    PP1["Partitioner → Chooses Partition 0 (Key: user123)"]
-    PP2["Partitioner → Chooses Partition 1 (Key: user987)"]
-    PP3["Partitioner → Chooses Partition 2 (Round Robin)"]
-
-    DW1 --> PP1
-    DW2 --> PP2
-    DW3 --> PP3
+    DW1Config["mysql-connector.properties"]
+    DW2Config["postgres-connector.properties"]
+    DW3Config["mysql-connector-2.properties"]
 end
 
 %% ============================
-%% TOPIC PARTITIONS
+%% KAFKA PRODUCER PARTITIONS
 %% ============================
-subgraph TopicLayer["Kafka Topic: orders (3 Partitions)"]
-    TP0["Topic Partition 0"]
-    TP1["Topic Partition 1"]
-    TP2["Topic Partition 2"]
+subgraph KafkaProducers["Kafka Producer Partitions"]
+    OrdersP0["orders topic - Partition 0"]
+    OrdersP1["orders topic - Partition 1"]
+    InventoryP0["inventory topic - Partition 0"]
+    InventoryP1["inventory topic - Partition 1"]
 end
 
-PP1 --> TP0
-PP2 --> TP1
-PP3 --> TP2
-
 %% ============================
-%% BROKER LAYER (LEADER + REPLICAS)
-%% ============================
-subgraph BrokerLayer["Kafka Brokers (Leader + Replicas)"]
-    %% Leaders
-    BP0L["Broker 1 → P0 (Leader)"]
-    BP1L["Broker 2 → P1 (Leader)"]
-    BP2L["Broker 3 → P2 (Leader)"]
-
-    %% Replicas
-    BP0R2["Broker 2 → P0 Replica"]
-    BP0R3["Broker 3 → P0 Replica"]
-
-    BP1R1["Broker 1 → P1 Replica"]
-    BP1R3["Broker 3 → P1 Replica"]
-
-    BP2R1["Broker 1 → P2 Replica"]
-    BP2R2["Broker 2 → P2 Replica"]
-end
-
-TP0 --> BP0L
-TP1 --> BP1L
-TP2 --> BP2L
-
-%% Replication
-BP0L -.replicates.-> BP0R2
-BP0L -.replicates.-> BP0R3
-
-BP1L -.replicates.-> BP1R1
-BP1L -.replicates.-> BP1R3
-
-BP2L -.replicates.-> BP2R1
-BP2L -.replicates.-> BP2R2
-
-%% ============================
-%% CONSUMER GROUP 1
-%% ============================
-subgraph CG1["Consumer Group CG-Orders"]
-    C1A["CG1 - Consumer A (Assigned P0)"]
-    C1B["CG1 - Consumer B (Assigned P1)"]
-    C1C["CG1 - Consumer C (Assigned P2)"]
-end
-
-BP0L --> C1A
-BP1L --> C1B
-BP2L --> C1C
-
-%% ============================
-%% DATA FLOWS (3 Examples)
+%% CONNECTIONS
 %% ============================
 
-%% FLOW 1
-DW1 -. "event: {user123, purchase}" .-> PP1
-PP1 -.-> TP0
-TP0 -.-> BP0L
-BP0L -.-> C1A
+%% Database -> Connectors (inside workers)
+MySQLDB --> DW1
+PostgresDB --> DW2
+MySQLDB --> DW3
+DBConfig --> MySQLDB
+DBConfig --> PostgresDB
 
-%% FLOW 2
-DW2 -. "event: {user987, refund}" .-> PP2
-PP2 -.-> TP1
-TP1 -.-> BP1L
-BP1L -.-> C1B
-
-%% FLOW 3
-DW3 -. "event: {no-key}" .-> PP3
-PP3 -.-> TP2
-TP2 -.-> BP2L
-BP2L -.-> C1C
-
-%% ============================
-%% DEBEZIUM CONNECTOR CONFIG FILES
-%% ============================
-DW1Config["mysql-connector.properties"]
-DW2Config["postgres-connector.properties"]
-DW3Config["mysql-connector-2.properties"]
-
+%% Worker config files
 DW1Config --> DW1
 DW2Config --> DW2
 DW3Config --> DW3
+
+%% Workers -> Kafka Producer Partitions
+DW1 --> OrdersP0
+DW1 --> InventoryP0
+
+DW2 --> OrdersP1
+DW2 --> InventoryP1
+
+DW3 --> OrdersP0
+DW3 --> InventoryP0
 ```
 
 ### **Explanation of Architecture**
