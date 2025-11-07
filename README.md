@@ -3664,7 +3664,7 @@ This overrides defaults dynamically.
 
 ---
 
-## Flow of Data from RDS --> CDC --> Kinesis Data Streams --> Data Firehose
+## Flow of Data from RDS --> CDC --> Kinesis Data Streams --> Data Firehose --> S3
 
 ### Comprehensive Breakdown: Data Flow from RDS via DMS (CDC) to Kinesis Data Streams, Then to Kinesis Data Firehose
 Think of this pipeline as a **real-time Change Data Capture (CDC) conveyor belt**: It captures database changes (inserts, updates, deletes) from RDS, streams them durably, and loads them into a destination like S3 for analytics. It's fault-tolerant, scalable, and low-latency (~seconds end-to-end), but requires careful tuning to avoid bottlenecks.
@@ -3859,6 +3859,154 @@ This is the **heart** of the pipeline—a partitioned, append-only log for real-
 
 </details>
 
+---
 
+## Real-Time DMS to S3 Table Pipeline: Detailed Documentation
+DMS has supported S3 as a native target since 2018, enabling full load (initial snapshot) + ongoing CDC without extra services. Output is compressed, columnar Parquet for efficient querying. No junk tables are included—only your selected ones. This pipeline is serverless (except for the DMS instance), scalable, and low-cost.
 
+- **Latency**: 1-5 seconds for CDC changes (tunable to ~1.8s with micro-batches); full load: minutes to hours based on table size.  
+- **Throughput**: Up to 100K+ records/second per task; S3 handles petabytes.  
+- **Cost Drivers**: DMS instance (~$0.036/hour for t3.micro) + S3 storage (~$0.023/GB-month) + query costs (Athena: $5/TB scanned; Redshift: $5/TB scanned via Spectrum).  
+- **Use Case Example**: Real-time sync of e-commerce tables (`orders`/`payments`) to S3 for fraud analytics, ignoring non-critical tables like logs. Query via SQL in Athena/Redshift as if it's a database table.  
 
+#### Achievable Features
+- **Selective Tables**: Yes—filter to only 3 tables (or any subset) using DMS table mappings. No impact on non-selected tables.  
+- **Real-Time Streaming**: Yes—tune DMS for 1-3 second micro-batches (1-row files if needed), achieving <5s end-to-end reflection in S3. With Iceberg, queries see changes in ~1.8s without manual refreshes.  
+- **S3 as Queryable Table**: Yes—use Athena/Redshift Spectrum for SQL queries on S3 data (e.g., `SELECT * FROM s3_orders WHERE id=999`). Iceberg adds ACID transactions and auto-compaction.  
+- **Full Load + CDC**: Yes—initial snapshot + ongoing inserts/updates/deletes (reflected as `op` column: I/U/D).  
+- **Partitioning/Compression**: Yes—automatic date-based partitions (YYYY/MM/DD/HH) and Snappy compression (60-70% size reduction).  
+- **Validation/Security**: Yes—row-level validation, encryption (SSE-KMS), IAM controls.  
+- **Scalability**: Yes—DMS auto-resumes on failures; S3 scales infinitely.  
+- **Query Tools**: Yes—Athena (serverless SQL), Redshift (for joins with existing data), DuckDB/Pandas/Spark (local querying).  
+
+#### Non-Achievable Features (Limitations)
+- **Sub-Second Latency**: No—DMS CDC is near real-time (1-5s minimum due to log tailing/batching). For <1s, use Kinesis/Firehose or database triggers (not DMS).  
+- **Bi-Directional Sync**: No—DMS is one-way (RDS to S3). For two-way, use custom Lambda or third-party tools.  
+- **Automatic Schema Evolution in Basic Setup**: Partial—DMS propagates simple DDL (e.g., ADD COLUMN) if configured, but complex changes (e.g., DROP COLUMN) require task restart. Iceberg handles evolution better.  
+- **Native Upserts/Merges in S3**: No—DMS appends only (no deletes/merges). Use Redshift staging tables or Iceberg for upserts.  
+- **Zero-Downtime Full Reload**: No—Full load truncates target if configured; plan downtime or use separate tasks.  
+- **Direct S3 Writes Without Instance**: No—DMS requires a replication instance (not serverless). For fully serverless, use Kinesis.  
+- **Complex Transformations**: Partial—Basic (e.g., column rename) via mappings; advanced needs Lambda (add via Firehose, not direct DMS-S3).  
+- **Infinite Retention/Backfills**: Yes, but S3 costs rise; DMS doesn't auto-backfill historical data beyond retention.  
+
+If these limitations are blockers, alternatives: Kinesis for <1s latency, Glue for ETL, or Debezium for open-source.
+
+<details>
+    <summary>Click to view the Prerequisites and Configurations</summary>
+
+#### Prerequisites
+- **RDS Database**: Configured for CDC (MySQL: `binlog_format=ROW`; PostgreSQL: `rds.logical_replication=1`). Replication user with privileges (e.g., `REPLICATION SLAVE` for MySQL).  
+- **IAM Roles**:  
+  - DMS Role: `AmazonDMSVPCManagementRole` + custom S3 write:  
+    ```json  
+    { "Version": "2012-10-17", "Statement": [{ "Effect": "Allow", "Action": ["s3:PutObject", "s3:ListBucket", "s3:DeleteObject"], "Resource": ["arn:aws:s3:::my-cdc-lake/*", "arn:aws:s3:::my-cdc-lake"] }] }  
+    ```  
+  - Lake Formation Admin: For Athena/Iceberg (grant yourself via IAM > Lake Formation > Add Administrators).  
+- **S3 Bucket**: Create `my-cdc-lake` (enable versioning, SSE-KMS for encryption).  
+- **Tools Needed**: AWS CLI/Console; optional DuckDB for testing.  
+- **Assumptions**: RDS in same VPC as DMS; basic knowledge of JSON configs. Test on non-prod first.
+
+#### Step-by-Step Configuration
+Follow in order. Total time: 15-30 minutes. CLI for automation; Console for ease.
+
+1. **Create DMS Replication Instance** (Compute for Task):  
+   - **Console**: DMS > Replication Instances > Create.  
+     - Name: `realtime-cdc-instance`.  
+     - Class: `dms.t3.micro` (start small).  
+     - Multi-AZ: Yes.  
+     - VPC/Security Group: Match RDS.  
+     - Storage: 50GB.  
+   - **CLI**:  
+     ```bash  
+     aws dms create-replication-instance --replication-instance-identifier realtime-cdc-instance --replication-instance-class dms.t3.micro --multi-az --vpc-security-group-ids sg-12345678 --replication-subnet-group-identifier my-subnet-group  
+     ```  
+   - **Behavior**: Provisions in ~5min. Scales manually if needed.  
+   - **Why?**: Runs CDC logic; no serverless alternative in DMS.
+
+2. **Create Source Endpoint (RDS Connection)**:  
+   - **Console**: DMS > Endpoints > Create > Source.  
+     - Engine: MySQL/PostgreSQL.  
+     - Server: RDS endpoint (e.g., `mydb.rds.amazonaws.com`).  
+     - Port: 3306/5432.  
+     - User/Password: Replication creds.  
+     - Database: `sales`.  
+     - Test Connection.  
+   - **CLI**:  
+     ```bash  
+     aws dms create-endpoint --endpoint-identifier rds-source --endpoint-type source --mysql-settings '{"ServerName":"mydb.rds.amazonaws.com","Port":3306,"Username":"repl_user","Password":"secret"}'  
+     ```  
+   - **Behavior**: Tails logs for CDC; snapshots for full load.  
+   - **Why Selective?**: Filters happen in task (step 5).
+
+3. **Create Target Endpoint (S3 with Real-Time Tuning)**:  
+   - **Console**: DMS > Endpoints > Create > Target.  
+     - Engine: Amazon S3.  
+     - Role ARN: DMS role.  
+     - Bucket: `my-cdc-lake`.  
+     - Folder: `realtime/`.  
+     - Format: Parquet.  
+     - Compression: Snappy.  
+     - Partition: Enabled (yyyymmddhhmmss for micro-batches).  
+     - Settings JSON:  
+       ```json  
+       {"BucketFolder":"realtime/","DataFormat":"parquet","CompressionType":"snappy","DatePartitionEnabled":true,"DatePartitionSequence":"yyyymmddhhmmss","ParquetTimestampInMillisecond":true,"AddColumnName":true,"IncludeOpForFullLoad":true,"CdcInsertsAndUpdates":true}  
+       ```  
+   - **CLI**:  
+     ```bash  
+     aws dms create-endpoint --endpoint-identifier s3-realtime --endpoint-type target --s3-settings '{"ServiceAccessRoleArn":"arn:...:role/dms-s3","BucketName":"my-cdc-lake","BucketFolder":"realtime/","DataFormat":"parquet","CompressionType":"snappy","DatePartitionEnabled":true,"DatePartitionSequence":"yyyymmddhhmmss"}'  
+     ```  
+   - **Behavior**: Micro-files (1-row) every 1-3s for real-time.  
+   - **Why?**: Enables sub-5s streaming; partitions by second for granularity.
+
+4. **Create Replication Task (Selective Tables + Real-Time)**:  
+   - **Console**: DMS > Tasks > Create.  
+     - Name: `realtime-selective-to-s3`.  
+     - Instance: `realtime-cdc-instance`.  
+     - Source: `rds-source`.  
+     - Target: `s3-realtime`.  
+     - Type: Full load + CDC.  
+     - Table Mappings JSON:  
+       ```json  
+       {"rules":[{"rule-type":"selection","rule-id":"1","rule-action":"include","object-locator":{"schema-name":"sales","table-name":"orders"}},{"rule-type":"selection","rule-id":"2","rule-action":"include","object-locator":{"schema-name":"sales","table-name":"payments"}},{"rule-type":"selection","rule-id":"3","rule-action":"include","object-locator":{"schema-name":"risk","table-name":"fraud_flags"}}]}  
+       ```  
+     - Task Settings JSON (for real-time):  
+       ```json  
+       {"TargetMetadata":{"BatchApplyEnabled":false,"SupportLobs":true,"LobMaxSize":0},"FullLoadSettings":{"MaxFullLoadSubTasks":4,"TransactionConsistencyTimeout":600},"ChangeProcessingTuning":{"BatchApplyMemoryLimit":50,"BatchApplyTimeoutMin":1,"BatchApplyTimeoutMax":3,"BatchSize":1,"CommitTimeout":1,"MinTransactionSize":1},"CdcSettings":{"CdcMaxBatchInterval":3,"CdcMinBatchSize":1},"ErrorBehavior":{"DataErrorPolicy":"LOG_ERROR","RecoverableErrorCount":-1},"ValidationSettings":{"EnableValidation":true,"ValidationMode":"ROW_LEVEL"}}  
+       ```  
+     - Validation: Enable.  
+     - Start: On create.  
+   - **CLI**:  
+     ```bash  
+     aws dms create-replication-task --replication-task-identifier realtime-selective-to-s3 --source-endpoint-arn arn:...:rds-source --target-endpoint-arn arn:...:s3-realtime --replication-instance-arn arn:...:realtime-cdc-instance --migration-type full-load-and-cdc --table-mappings file://mappings.json --replication-task-settings file://settings.json  
+     ```  
+   - **Behavior**: Only selected tables processed; micro-batches every 1-3s. Files: `realtime/sales/orders/20251107143201/data.parquet`.  
+   - **Why Real-Time?**: Low `CdcMaxBatchInterval`/ `BatchSize` flushes frequently.
+
+5. **Make S3 Queryable as Tables (Athena/Redshift/Iceberg)**:  
+   - **Enable Lake Formation**: Console > Lake Formation > Register Bucket > `my-cdc-lake`. Add yourself as admin.  
+   - **Athena Table (Basic)**: Athena Query Editor:  
+     ```sql  
+     CREATE EXTERNAL TABLE cdc.orders (id BIGINT, status VARCHAR(20), amount DECIMAL(12,2), op CHAR(1), _dms_ts TIMESTAMP) PARTITIONED BY (year VARCHAR(4), month VARCHAR(2), day VARCHAR(2), hour VARCHAR(2), minute VARCHAR(2), second VARCHAR(2)) STORED AS PARQUET LOCATION 's3://my-cdc-lake/realtime/sales/orders/';  
+     MSCK REPAIR TABLE cdc.orders;  -- Run every 60s via Lambda for real-time.  
+     ```  
+   - **Redshift Spectrum**: Redshift Editor:  
+     ```sql  
+     CREATE EXTERNAL TABLE spectrum.orders (id BIGINT, status VARCHAR(20), amount DECIMAL(12,2), op CHAR(1), _dms_ts TIMESTAMP) PARTITIONED BY (year VARCHAR(4), month VARCHAR(2), day VARCHAR(2), hour VARCHAR(2), minute VARCHAR(2), second VARCHAR(2)) STORED AS PARQUET LOCATION 's3://my-cdc-lake/realtime/sales/orders/';  
+     MSCK REPAIR TABLE spectrum.orders;  
+     ```  
+   - **Iceberg for Advanced Real-Time (No Repair Needed)**: Athena:  
+     ```sql  
+     CREATE TABLE cdc.orders_iceberg (id BIGINT, status STRING, amount DECIMAL(12,2), op CHAR(1), _dms_ts TIMESTAMP) PARTITIONED BY (hour STRING) STORED AS ICEBERG LOCATION 's3://my-cdc-lake/iceberg/orders/' TBLPROPERTIES ('table_type'='ICEBERG', 'format'='parquet', 'write_compression'='snappy', 'optimize_rewrite_data_file_threshold'='1');  
+     ```  
+     - Behavior: Auto-reflects changes in ~1.8s; compaction merges tiny files in background.  
+   - **Query Example**: `SELECT * FROM cdc.orders WHERE id=999 AND _dms_ts > CURRENT_TIMESTAMP - INTERVAL '5' SECOND;`.  
+
+6. **Monitoring, Testing, and Optimization**:  
+   - **Test**: Insert in RDS: `INSERT INTO orders (id) VALUES (999);`. Check S3: `aws s3 ls s3://my-cdc-lake/realtime/ --recursive`. Query Athena: Expect row in <5s.  
+   - **Monitor**: CloudWatch > DMS Metrics (e.g., `CDCLatencyTarget <5s`). Logs: `/aws/dms/task/...`. Alarm on errors.  
+   - **Optimize**: For compaction, add Glue Job/Lambda to merge files hourly. Scale instance if latency >5s. Stop task idle: `aws dms stop-replication-task`.  
+   - **Edge Cases**: LOBs—chunk with `LobChunkSize=64`; DDL—restart task; Failover—Multi-AZ handles.  
+
+From here, your selected tables stream to S3 tables in real-time—query live changes via SQL. Add tables by updating mappings/restarting.
+
+</details>
