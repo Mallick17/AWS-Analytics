@@ -426,7 +426,6 @@ This automatic compaction in S3 Tables helps maintain efficient and performant d
 </details>
 
 ---
-
 # Debezium
 ### Debezium MySQL Connector Configuration Overview
 The Debezium MySQL connector captures row-level changes from MySQL databases (including Amazon RDS for MySQL) by reading the binary log (binlog). Configurations are set as key-value pairs when registering the connector via Kafka Connect REST API or properties files. All properties are optional unless marked required, with sensible defaults for most. 
@@ -877,6 +876,346 @@ These control snapshots, filtering, data handling, etc. Grouped by category.
 - **Limits Overview**: Timeouts (ms, positive ints); sizes (positive ints, e.g., 1024 rows); regex (anchored, Java flavor); enums (case-sensitive).
 - **Error Handling**: Most invalid configs cause immediate startup failure. Runtime issues (e.g., bad regex) log warnings and degrade gracefully (e.g., skip tables).
 - **Best Practices for RDS**: Use IAM DB auth if possible; monitor binlog retention to avoid offset loss.
+
+</details>
+
+## Explicit configuration of the offset store and internal schema history storage is configured via connector properties.
+### Overview
+Debezium connectors require persistent storage to preserve their state between restarts. All connectors need a mechanism for persistent storage of offsets. Additionally, connectors like Db2, MySQL, Oracle, and SQL Server require extra storage for their internal schema history, which records changes to table schema in the database.
+
+Offset storage is automatically provided for deployments in the Kafka Connect runtime via:
+- Kafka offset store: Provides storage for Kafka Connect distributed.
+- File offset store: Provides storage for Kafka Connect standalone.
+
+For Debezium Engine or Debezium Server deployments, explicit configuration of the offset store is required. For schema-based databases, internal schema history storage is configured via connector properties.
+
+### Kafka
+Debezium uses Kafka for storing state, including source offsets and schema history. Connectors use `KafkaOffsetBackingStore` to store offsets in a Kafka topic (e.g., `connect-offsets`), ensuring resumption from the correct position after restarts. Schema history is stored in a separate compacted topic, such as `schema-changes.inventory`.
+
+<details>
+    <summary>Click to view Properties of Offset Store</summary>
+
+
+#### Offset Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| offset.storage | No default | Must be set to `org.apache.kafka.connect.storage.KafkaOffsetBackingStore`. |
+| offset.storage.topic | No default | Specifies the Kafka topic where the connector stores its offsets. To ensure that the topic retains the latest offset information, you must enable log compaction for this topic. |
+| offset.storage.partitions | 25 | Specifies the number of partitions for the offset storage topic. Ensure that the value of this setting aligns with the partitioning strategy of the Kafka cluster. |
+| offset.storage.replication.factor | 3 | Sets the replication factor for the offset storage topic. Replicating data across multiple brokers improves fault tolerance. |
+
+</details>
+
+<details>
+    <summary>Click to view Properties of Internal Schema History Store</summary>
+
+#### Internal Schema History Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| schema.history.internal | No default | Must be set to `io.debezium.storage.kafka.history.KafkaSchemaHistory`. |
+| schema.history.internal.kafka.topic | No default | The name of the topic that stores the database schema history. |
+| schema.history.internal.kafka.bootstrap.servers | No default | A list of host and port pairs that the connector uses to establish the initial connection to the Kafka cluster to retrieve its database schema history. This value must match the connection settings that the Kafka Connect process uses to connect to the Kafka cluster. |
+| schema.history.internal.kafka.recovery.poll.interval.ms | 100 | Specifies the time, in milliseconds, that the connector waits between polling requests for persisted data during recovery. |
+| schema.history.internal.kafka.recovery.attempts | 100 | Specifies the number of consecutive unsuccessful attempts to retrieve schema history data from Kafka that the connector allows. Recovery attempts stop after the number of attempts exceeds this value. The maximum time that the connector waits after it is unable to retrieve data is `recovery.attempts` x `recovery.poll.interval.ms`. |
+| schema.history.internal.kafka.query.timeout.ms | 3 | Specifies the time, in milliseconds, that the connector waits for a response after the Kafka AdminClient submits a request to fetch cluster information before the request times out. |
+| schema.history.internal.kafka.create.timeout.ms | 30 | Specifies the time, in milliseconds, that the connector waits for a response after the Kafka AdminClient submits a request to create a Kafka history topic before the request times out. |
+| schema.history.internal.producer.* | No Default | Pass-through properties prefix for configuring how producer clients interact with schema history topics. |
+| schema.history.internal.consumer.* | No Default | Pass-through properties prefix for configuring how consumer clients interact with schema history topics. |
+
+</details>
+
+### File
+Offsets can be persisted in a local file on disk, ensuring resumption from the last read position after restarts. This provides a simple, fast mechanism ideal for single-node applications or testing scenarios.
+
+<details>
+    <summary>Click to view Properties of Offset Store, Internal Schema History Store</summary>
+
+#### Offset Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| offset.storage | No default | Must be set to `org.apache.kafka.connect.storage.FileOffsetBackingStore`. |
+| offset.storage.file.filename | No default | The path to the file where Debezium stores source connector offsets. |
+| offset.flush.interval.ms | 6000ms | Specifies the time, in milliseconds, between attempts to flush the current offset state to the configured offsets file. |
+
+#### Internal Schema History Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| schema.history.internal | No default | Must be set to `io.debezium.storage.file.history.FileSchemaHistory`. |
+| schema.history.internal.file | No default | The path to the file where Debezium records the database schema history. |
+
+</details>
+
+### Memory
+`MemoryOffsetBackingStore` is a volatile, in-memory store for tracking source offsets, preserving state only during runtime. Offsets are lost on shutdown or crash. Ideal for testing or short-lived tasks, not production.
+
+<details>
+    <summary>Click to view Properties of Offset Store and Internal Schema History Store</summary>
+
+#### Offset Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| offset.storage | No default | Must be set to `org.apache.kafka.connect.storage.MemoryOffsetBackingStore`. |
+
+#### Internal Schema History Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| schema.history.internal | No default | Must be set to `io.debezium.relational.history.MemorySchemaHistory`. |
+
+</details>
+
+### JDBC
+Uses an arbitrary relational database for offset data storage. Provide the JDBC driver. Can use the source database or a different one. Pre-configured DML/DDL statements can be used or overridden for compatibility or customization.
+
+<details>
+    <summary>Click to view Properties of Offset Store</summary>
+
+#### Offset Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| offset.storage | No default | Must be set to `io.debezium.storage.jdbc.offset.JdbcOffsetBackingStore`. |
+| offset.storage.jdbc.connection.url | No default | JDBC driver connection string to connect to the database. |
+| offset.storage.jdbc.connection.user | No default | (Optional) The username through which Debezium connects to the database that stores offset data. |
+| offset.storage.jdbc.connection.password | No default | (Optional) Password for the user specified by `offset.storage.jdbc.connection.user`. |
+| offset.storage.jdbc.connection.wait.retry.delay.ms | 3 seconds | (Optional) Specifies the time, in milliseconds, that the connector waits to retry the connection after failed attempts to connect to the offset storage database. |
+| offset.storage.jdbc.connection.retry.max.attempts | 5 | (Optional) Specifies the maximum number of times that Debezium retries the connection to the offset storage database after a connection failure. |
+| offset.storage.jdbc.table.name | debezium_offset_storage | The name of the table where Debezium stores offsets. |
+| offset.storage.jdbc.table.ddl | Create Query | DDL statement to create the offset table. |
+| offset.storage.jdbc.table.select | Select query | DML statement that Debezium uses to read offsets values from the table. |
+| offset.storage.jdbc.table.insert | Insert query | DML statement that Debezium uses to write offsets to the table. |
+| offset.storage.jdbc.table.delete | Delete query | DML statement that Debezium uses to remove offsets from the table. |
+
+</details>
+
+<details>
+    <summary>Click to view</summary>
+
+##### Deprecated Configuration (Prior to 3.2)
+| Property | Default | Description |
+|----------|---------|-------------|
+| offset.storage | No default | Must be set to `io.debezium.storage.jdbc.offset.JdbcOffsetBackingStore`. |
+| offset.storage.jdbc.url | No default | JDBC driver connection string to connect to the database. |
+| offset.storage.jdbc.user | No default | (Optional) The username through which Debezium connects to the database that stores offset data. |
+| offset.storage.jdbc.password | No default | (Optional) Password for the user specified by `offset.storage.jdbc.user`. |
+| offset.storage.jdbc.wait.retry.delay.ms | 3 seconds | (Optional) Specifies the time, in milliseconds, that the connector waits to retry the connection after failed attempts to connect to the offset storage database. |
+| offset.storage.jdbc.retry.max.attempts | 5 | (Optional) Specifies the maximum number of times that Debezium retries the connection to the offset storage database after a connection failure. |
+| offset.storage.jdbc.offset.table.name | debezium_offset_storage | The name of the table where Debezium stores offsets. |
+| offset.storage.jdbc.offset.table.ddl | Create Query | DDL statement to create the offset table. |
+| offset.storage.jdbc.offset.table.select | Select query | DML statement to read offsets stored from the table. |
+| offset.storage.offset.table.insert | Insert query | DML statement to write offsets to the table. |
+| offset.storage.jdbc.offset.table.delete | Delete query | DML statement to remove offsets from the table. |
+
+</details>
+
+##### Offset Table Defaults
+- **Create Query**:
+  ```
+  CREATE TABLE %s (
+  id VARCHAR(36)      NOT NULL,
+  offset_key          VARCHAR(1255),
+  offset_val          VARCHAR(1255),
+  record_insert_ts    TIMESTAMP NOT NULL,
+  record_insert_seq   INTEGER NOT NULL)
+  ```
+- **Select Query**:
+  ```
+  SELECT id, offset_key, offset_val FROM %s ORDER BY record_insert_ts, record_insert_seq
+  ```
+- **Insert Query**:
+  ```
+  INSERT INTO %s(id, offset_key, offset_val, record_insert_ts, record_insert_seq)
+      VALUES ( ?, ?, ?, ?, ? )
+  ```
+- **Delete Query**:
+  ```
+  DELETE FROM %s
+  ```
+
+<details>
+    <summary>Click to view Properties of Internal Schema History Store</summary>
+
+#### Internal Schema History Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| schema.history.internal | No default | Must be set to `io.debezium.storage.jdbc.history.JdbcSchemaHistory`. |
+| schema.history.internal.jdbc.connection.url | No default | JDBC driver connection string to connect to the database. |
+| schema.history.internal.jdbc.connection.user | No default | (Optional) The username through which Debezium connects to the database that stores schema history data. |
+| schema.history.internal.jdbc.connection.password | No default | (Optional) Password for the user specified by `schema.history.internal.jdbc.connection.user`. |
+| schema.history.internal.jdbc.connection.retry.delay.ms | 3 seconds | (Optional) Specifies the time, in milliseconds, that the connector waits to retry the connection after an attempt to connect to the internal schema history database fails. |
+| schema.history.internal.jdbc.connection.retry.max.attempts | 5 | (Optional) Specifies the maximum number of times that Debezium retries the connection to the internal schema history database after a connection failure. |
+| schema.history.internal.jdbc.table.name | debezium_database_history | The name of the table where Debezium stores the internal schema history. |
+| schema.history.internal.jdbc.table.ddl | Create Query | The DDL statement used to create a table to store the internal schema history. |
+| schema.history.internal.jdbc.table.select | Select query | The SELECT statement to read schema changes from the internal schema history table. |
+| schema.history.internal.jdbc.table.exists.select | Data Exist Query | The SELECT statement that checks for the existence of an internal schema history storage table. |
+| schema.history.internal.jdbc.table.insert | Insert query | The INSERT statement that records changes to the internal schema history table. |
+
+</details>
+
+<details>
+    <summary>Click to view Deprecated Configuration (Prior to 3.2)</summary>
+
+##### Deprecated Configuration (Prior to 3.2)
+| Property | Default | Description |
+|----------|---------|-------------|
+| schema.history.internal | No default | Must be set to `io.debezium.storage.jdbc.history.JdbcSchemaHistory`. |
+| schema.history.internal.jdbc.url | No default | JDBC driver connection string to connect to the database. |
+| schema.history.internal.jdbc.user | No default | (Optional) The username through which Debezium connects to the database that stores internal schema history data. |
+| schema.history.internal.jdbc.password | No default | (Optional) Password for the user specified by `schema.history.internal.jdbc.user`. |
+| schema.history.internal.jdbc.retry.delay.ms | 3 seconds | (Optional) Specifies the time, in milliseconds, that the connector waits to retry the connection after an attempt to connect to the internal schema history database fails. |
+| schema.history.internal.jdbc.retry.max.attempts | 5 | (Optional) Specifies the maximum number of times that Debezium retries the connection to the internal schema history database after a connection failure. |
+| schema.history.internal.jdbc.schema.history.table.name | debezium_database_history | The name of the table where Debezium stores the internal schema history. |
+| schema.history.internal.jdbc.schema.history.table.ddl | Create Query | The DDL statement used to create the internal schema history storage table. |
+| schema.history.internal.jdbc.schema.history.table.select | Select query | The SELECT statement to read schema changes from the internal schema history table. |
+| schema.history.internal.jdbc.schema.history.table.exists.select | Data Exist Query | The SELECT statement that checks for the existence of an internal schema history storage table. |
+| schema.history.internal.jdbc.schema.history.table.insert | Delete query | The INSERT statement that records changes to the internal schema history table. |
+
+</details>
+
+##### History Table Defaults
+- **Create Query**:
+  ```
+  CREATE TABLE %s (
+      id VARCHAR(36) NOT NULL,
+      history_data VARCHAR(65000),
+      history_data_seq INTEGER,
+      record_insert_ts TIMESTAMP NOT NULL,
+      record_insert_seq INTEGER NOT NULL
+  )
+  ```
+- **Select Query**:
+  ```
+  SELECT id, history_data FROM %s
+      ORDER BY record_insert_ts, record_insert_seq, id, history_data_seq
+  ```
+- **Data Exist Query**:
+  ```
+  SELECT * FROM %s LIMIT 1
+  ```
+- **Insert Query**:
+  ```
+  INSERT INTO %s(id, history_data, history_data_seq, record_insert_ts, record_insert_seq) VALUES ( ?, ?, ?, ?, ? )
+  ```
+
+### Redis
+Uses a Jedis client to store data in a Redis cache.
+
+<details>
+    <summary>Click to view Properties of Internal Schema History Store</summary>
+
+#### Offset Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| offset.storage | No default | Must be set to `io.debezium.storage.redis.offset.RedisOffsetBackingStore`. |
+| offset.storage.redis.key | metadata:debezium:offsets | The Redis key that Debezium uses to store offsets. |
+| offset.storage.redis.address | No default | The URL through which Debezium connects to Redis to store offset data. |
+| offset.storage.redis.user | No default | The user account through which Debezium connects to Redis to store offset data. |
+| offset.storage.redis.password | No default | The password for the user account through which Debezium connects to Redis to store offset data. |
+| offset.storage.redis.db.index | 0 | The database index (0..15) that Debezium uses to access Redis to store offset data. |
+| offset.storage.redis.ssl.enabled | false | Specifies whether Debezium uses SSL when communicating with Redis to store offset data. |
+| offset.storage.redis.ssl.hostname.verification.enabled | false | Specifies whether Debezium has hostname verification enabled when communicating with Redis to store offset data. |
+| offset.storage.redis.ssl.truststore.path | No default | The path to the trust store file used for SSL/TLS connections to Redis for offset storage. If set, Redis connections will use this property over other configuration or system properties. |
+| offset.storage.redis.ssl.truststore.password | No default | The password for the trust store file used for SSL/TLS connections to Redis for offset storage. If set, Redis connections will use this property over other configuration or system properties. |
+| offset.storage.redis.ssl.truststore.type | JKS | The type of the trust store file used for SSL/TLS connections to Redis for offset storage. If set, Redis connections will use this property over other configuration or system properties. |
+| offset.storage.redis.ssl.keystore.path | No default | The path to the key store file used for SSL/TLS connections to Redis for offset storage. If set, Redis connections will use this property over other configuration or system properties. |
+| offset.storage.redis.ssl.keystore.password | No default | The password for the key store file used for SSL/TLS connections to Redis for offset storage. If set, Redis connections will use this property over other configuration or system properties. |
+| offset.storage.redis.ssl.keystore.type | JKS | The type of the key store file used for SSL/TLS connections to Redis for offset storage. |
+| offset.storage.redis.connection.timeout.ms | 2000 | Specifies the time, in milliseconds, that Debezium waits to establish a connection to Redis before the connection times out. |
+| offset.storage.redis.socket.timeout.ms | 2000 | Specifies the interval, in milliseconds, that Debezium allows for exchanging offset data with Redis before the socket times out. If a data packet is not transferred with the specified interval, Debezium closes the socket. |
+| offset.storage.redis.retry.initial.delay.ms | 300 | Specifies the time, in milliseconds, that Debezium waits to retry the connection after an initial attempt to connect to Redis fails. |
+| offset.storage.redis.retry.max.delay.ms | 10000 | Specifies the maximum time, in milliseconds, that Debezium waits to retry the connection after an attempt to connect to Redis fails. |
+| offset.storage.redis.retry.max.attempts | 10 | Specifies the maximum number of times that Debezium retries the connection to Redis after connection attempts fail. |
+| offset.storage.redis.wait.enabled | false | In Redis environments that are configured to use a replica shard, specifies whether Debezium waits for Redis to verify that it wrote data to the replica. |
+| offset.storage.redis.wait.timeout.ms | 1000 | Specifies a time, in milliseconds, that Debezium waits for confirmation that Redis wrote data to a replica shard before the request times out. |
+| offset.storage.redis.wait.retry.enabled | false | Specifies whether Debezium retries failed requests to confirm whether data is written to a replica shard. |
+| offset.storage.redis.wait.retry.delay.ms | 1000 | Specifies the time, in milliseconds, that Debezium waits after a failure before it resubmits a request to Redis to confirm data is written to a replica shard. |
+
+</details>
+
+<details>
+    <summary>Click to view Properties of Internal Schema History Store</summary>
+
+#### Internal Schema History Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| schema.history.internal | No default | Must be set to `io.debezium.storage.redis.history.RedisSchemaHistory`. |
+| schema.history.internal.redis.key | metadata:debezium:schema_history | The Redis key that Debezium uses to store the schema history data. |
+| schema.history.internal.redis.address | No default | The URL through which Debezium connects to Redis to store schema history data. |
+| schema.history.internal.redis.user | No default | The user account through which Debezium connects to Redis to store schema history data. |
+| schema.history.internal.redis.password | No default | The password for the user account through which Debezium connects to Redis to store schema history data. |
+| schema.history.internal.redis.db.index | 0 | The database index (0..15) that Debezium uses to access Redis to store schema history data. |
+| schema.history.internal.storage.redis.ssl.enabled | false | Specifies whether Debezium uses SSL when communicating with Redis to store schema history data. |
+| schema.history.internal.storage.redis.ssl.hostname.verification.enabled | false | Specifies whether Debezium has hostname verification enabled when communicating with Redis to store schema history data. |
+| schema.history.internal.storage.redis.ssl.truststore.path | No default | The path to the trust store file used for SSL/TLS connections to Redis to store schema history data. |
+| schema.history.internal.storage.redis.ssl.truststore.password | No default | The password for the trust store file used for SSL/TLS connections to Redis to store schema history data. |
+| schema.history.internal.storage.redis.ssl.truststore.type | JKS | The type of the trust store file used for SSL/TLS connections to Redis to store schema history data. |
+| schema.history.internal.storage.redis.ssl.keystore.path | No default | The path to the key store file used for SSL/TLS connections to Redis to store schema history data. |
+| schema.history.internal.storage.redis.ssl.keystore.password | No default | The password for the key store file used for SSL/TLS connections to Redis to store schema history data. |
+| schema.history.internal.storage.redis.ssl.keystore.type | JKS | The type of the key store file used for SSL/TLS connections to Redis to store schema history data. |
+| schema.history.internal.storage.redis.connection.timeout.ms | 2000 | Specifies the time, in milliseconds, that Debezium waits to establish a connection to Redis before the connection times out. |
+| schema.history.internal.storage.redis.socket.timeout.ms | 2000 | Specifies the interval, in milliseconds, that Debezium allows for exchanging schema history data with Redis. If a data packet is not transferred with the specified interval, Debezium closes the socket. |
+| schema.history.internal.storage.redis.retry.initial.delay.ms | 300 | Specifies the time, in milliseconds, that Debezium waits to retry the connection after an initial attempt to connect to Redis fails. |
+| schema.history.internal.storage.redis.retry.max.delay.ms | 10000 | Specifies the maximum time, in milliseconds, that Debezium waits to retry the connection after an attempt to connect to Redis fails. |
+| schema.history.internal.storage.redis.retry.max.attempts | 10 | Specifies the maximum number of times that Debezium retries the connection to Redis after connection attempts fail. |
+| schema.history.internal.storage.redis.wait.enabled | false | In Redis environments that are configured to use a replica shard, specifies whether Debezium waits for Redis to verify that it wrote data to the replica. |
+| schema.history.internal.storage.redis.wait.timeout.ms | 1000 | Specifies the time, in milliseconds, that Debezium waits for confirmation that Redis wrote data to a replica shard before the request times out. |
+| schema.history.internal.storage.redis.wait.retry.enabled | false | Specifies whether Debezium retries failed requests to confirm whether data is written to a replica shard. |
+| schema.history.internal.storage.redis.wait.retry.delay.ms | 1000 | Specifies the time, in milliseconds, that Debezium waits after a failure before it resubmits a request to Redis to confirm data is written to a replica shard. |
+
+</details>
+
+### Amazon S3
+Uses Amazon S3 object storage service, typically with Amazon MSK.
+
+<details>
+    <summary>Click to view Properties of Internal Schema History Store</summary>
+
+#### Internal Schema History Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| schema.history.internal | No default | Must be set to `io.debezium.storage.s3.history.S3SchemaHistory`. |
+| schema.history.internal.s3.access.key.id | No default | (Optional) The identifier of the static access key that Debezium uses to authenticate with S3. |
+| schema.history.internal.s3.secret.access.key | No default | (Optional) The Amazon Web Services (AWS) secret key that Debezium uses to authenticate to S3. |
+| schema.history.internal.s3.region.name | No default | (Optional) Specifies the name of the region that hosts the S3 bucket. |
+| schema.history.internal.s3.bucket.name | No default | Specifies the name of the S3 bucket that stores the schema history. |
+| schema.history.internal.s3.object.name | No default | Specifies the object name in the bucket that stores the schema history. |
+| schema.history.internal.s3.endpoint | No default | (Optional) Specifies a custom URL that Debezium uses to access the S3 service. Provide the URL in the following format: http://<server>:<port>; |
+
+</details>
+
+### Azure Blob Storage
+Uses Azure Blob storage service, typically with Apache Kafka in Azure HDInsight.
+
+<details>
+    <summary>Click to view Properties of Internal Schema History Store</summary>
+
+#### Internal Schema History Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| schema.history.internal | No default | Must be set to `io.debezium.storage.azure.blob.history.AzureBlobSchemaHistory`. |
+| schema.history.internal.azure.storage.account.connectionstring | No default | Specifies the Azure Blob storage connection string. |
+| schema.history.internal.azure.storage.account.name | No default | The name of the account that Debezium uses to connect to Azure. |
+| schema.history.internal.azure.storage.account.container.name | No default | The name of the Azure container in which Debezium stores data. |
+| schema.history.internal.azure.storage.blob.name | No default | The name of the blob where Debezium stores data. |
+
+</details>
+
+### RocketMQ
+Uses `RocketMqSchemaHistory` to store and retrieve database schema changes in Apache RocketMQ.
+
+<details>
+    <summary>Click to view Properties of Internal Schema History Store</summary>
+
+#### Internal Schema History Store
+| Property | Default | Description |
+|----------|---------|-------------|
+| schema.history.internal | No default | Must be set to `io.debezium.storage.rocketmq.history.RocketMqSchemaHistory`. |
+| schema.history.internal.rocketmq.topic | No Default | The name of the RocketMQ topic where Debezium stores the database schema history. |
+| schema.history.internal.rocketmq.name.srv.addr | No Default | Specifies the host and port where the Apache RocketMQ NameServer discovery service is available. |
+| schema.history.internal.rocketmq.acl.enabled | false | Specifies whether to enable access control lists in RocketMQ. |
+| schema.history.internal.rocketmq.access.key | No Default | Specifies the RocketMQ access key. This field must include a value if `schema.history.internal.rocketmq.acl.enabled` is set to true. |
+| schema.history.internal.rocketmq.secret.key | No Default | Specifies the RocketMQ secret key. This field must include a value if `schema.history.internal.rocketmq.acl.enabled` is set to true. |
+| schema.history.internal.rocketmq.recovery.attempts | No Default | Specifies the number of consecutive attempts in which RocketMQ returns no data before recovery completes. |
+| schema.history.internal.rocketmq.recovery.poll.interval.ms | No Default | Specifies the time, in milliseconds, that Debezium waits after each poll attempt to recover the history. |
+| schema.history.internal.rocketmq.store.record.timeout.ms | No Default | Specifies the time, in milliseconds, that Debezium waits for a write to Rocket MQ to complete before the operation times out. |
 
 </details>
 
