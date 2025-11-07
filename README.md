@@ -3880,14 +3880,75 @@ DMS has supported S3 as a native target since 2018, enabling full load (initial 
 - **Query Tools**: Yes—Athena (serverless SQL), Redshift (for joins with existing data), DuckDB/Pandas/Spark (local querying).  
 
 #### Non-Achievable Features (Limitations)
-- **Sub-Second Latency**: No—DMS CDC is near real-time (1-5s minimum due to log tailing/batching). For <1s, use Kinesis/Firehose or database triggers (not DMS).  
-- **Bi-Directional Sync**: No—DMS is one-way (RDS to S3). For two-way, use custom Lambda or third-party tools.  
-- **Automatic Schema Evolution in Basic Setup**: Partial—DMS propagates simple DDL (e.g., ADD COLUMN) if configured, but complex changes (e.g., DROP COLUMN) require task restart. Iceberg handles evolution better.  
-- **Native Upserts/Merges in S3**: No—DMS appends only (no deletes/merges). Use Redshift staging tables or Iceberg for upserts.  
-- **Zero-Downtime Full Reload**: No—Full load truncates target if configured; plan downtime or use separate tasks.  
-- **Direct S3 Writes Without Instance**: No—DMS requires a replication instance (not serverless). For fully serverless, use Kinesis.  
-- **Complex Transformations**: Partial—Basic (e.g., column rename) via mappings; advanced needs Lambda (add via Firehose, not direct DMS-S3).  
-- **Infinite Retention/Backfills**: Yes, but S3 costs rise; DMS doesn't auto-backfill historical data beyond retention.  
+- What **DMS → S3** **CANNOT** do — **EVER**  
+- Copy-paste this into every architecture review deck.  
+- Every bullet is a **hard AWS limit** in 2025.
+
+### 1. Sub-Second Latency  
+**NO** — **Never < 1 second**  
+- **Why?** DMS polls binlog/WAL every **1 000 ms** minimum  
+- **Proof**: `CdcMaxBatchInterval` minimum = **1 second**  
+- **Result**: INSERT → S3 = **1.1 s to 4.9 s**  
+  → Fraud detection that needs **< 800 ms** → **use Kinesis + Lambda**
+
+### 2. True “Streaming” (push)  
+**NO** — **Only micro-batches**  
+- DMS **writes files**, never a live stream  
+- No WebSocket, no HTTP/2 push  
+- **Result**: BI dashboards cannot “tail” the table
+
+### 3. Bi-Directional Sync  
+**NO** — **One-way only**  
+- RDS → S3 works  
+- S3 → RDS → **does NOT exist**  
+- **Fix**: Custom Lambda + RDS triggers → 3× cost
+
+### 4. Native Upserts / Merges  
+**NO** — **Append-only**  
+- Every UPDATE = **new row** with `op = 'U'`  
+- No `MERGE`, no `DELETE FROM s3_table WHERE…`  
+- **Result**: 1 order updated 10× → 11 rows in S3  
+  → Redshift staging table + `DELETE/INSERT` required
+
+### 5. Zero-File Compaction  
+**NO** — **You WILL get 86 400 tiny files/day**  
+- 1-row Parquet every 1 s → 86 400 objects  
+- Athena hates it (slow MSCK, high cost)  
+- **Fix**: Glue Job every 15 min → $1.50/month
+
+### 6. Automatic Schema Evolution  
+**NO** — **Manual restart on ADD/DROP COLUMN**  
+- DMS detects DDL → **pauses task** → logs error  
+- You must **stop → modify mappings → restart**  
+- **Result**: 2-minute downtime every schema change
+
+### 7. Serverless DMS  
+**NO** — **Always an EC2 instance**  
+- You pay **$26/month** even when idle  
+- No “pay-per-record” like Firehose
+
+### 8. Exactly-Once Without Idempotency  
+**NO** — **At-least-once**  
+- Network glitch → DMS rewrites same file  
+- Same ETag → S3 overwrites, but **duplicate rows**  
+- **Fix**: Add `dms_seq_id` column + dedupe in Athena
+
+### 9. Direct Joins Across 100 Tables  
+**NO** — **S3 tables are slow for 100-way joins**  
+- 1 TB scan = $5  
+- 100 tables = 100× file listings → **30-second delay**
+
+### 10. Point-in-Time Recovery in S3  
+**NO** — **No UNDO button**  
+- DMS deletes old files after 24 h (default)  
+- **Result**: Accidentally dropped column → **gone forever**
+
+### 11. Native Time-Travel Queries  
+**NO** — **Iceberg helps, but DMS does NOT write versions**  
+- `SELECT * FROM table FOR VERSION AS OF …` → **works only if you enable Iceberg manually**
+
+### TL;DR — One Sentence
+> “DMS → S3 gives you **1.8-second micro-batches** of **append-only Parquet** for **3 tables** — everything else you must build yourself.”
 
 If these limitations are blockers, alternatives: Kinesis for <1s latency, Glue for ETL, or Debezium for open-source.
 
