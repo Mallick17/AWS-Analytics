@@ -4010,3 +4010,5 @@ Follow in order. Total time: 15-30 minutes. CLI for automation; Console for ease
 From here, your selected tables stream to S3 tables in real-time—query live changes via SQL. Add tables by updating mappings/restarting.
 
 </details>
+
+---
