@@ -3669,6 +3669,40 @@ This overrides defaults dynamically.
 ### Comprehensive Breakdown: Data Flow from RDS via DMS (CDC) to Kinesis Data Streams, Then to Kinesis Data Firehose
 Think of this pipeline as a **real-time Change Data Capture (CDC) conveyor belt**: It captures database changes (inserts, updates, deletes) from RDS, streams them durably, and loads them into a destination like S3 for analytics. It's fault-tolerant, scalable, and low-latency (~seconds end-to-end), but requires careful tuning to avoid bottlenecks.
 
+```mermaid
+flowchart LR
+    %% Actors
+    DMS[DMS Task]
+    Kinesis[Kinesis shard-0003]
+    Firehose[Firehose rds-to-lake]
+    Lambda[Lambda cdc-parquet]
+    S3[S3 cdc-lake-prod]
+
+    %% Timeline / Events
+    DMS -->|PutRecords 1.38 MB<br>seq 3962794871…| Kinesis
+    Kinesis -->|3x AZ write| Kinesis
+    Kinesis -->|GetRecords<br>IteratorAge = 87ms| Firehose
+    Firehose -->|Buffer 2.79 MB / 60s timer fires| Firehose
+    Firehose -->|Invoke Lambda 1812 ms| Lambda
+    Lambda -->|Return 0.91 MB Snappy| Firehose
+    Firehose -->|PUT part-00000.snappy.parquet<br>ETag: d41d8cd98f00b204e9…| S3
+    S3 -->|Manifest<br>manifest/2025-11-07T14.json| S3
+    Firehose -->|Checkpoint seq 3962794871…| Kinesis
+
+    %% Styling (optional)
+    classDef dms fill:#1f6feb,stroke:#000,color:white;
+    classDef kinesis fill:#238636,stroke:#000,color:white;
+    classDef firehose fill:#d29922,stroke:#000,color:white;
+    classDef lambda fill:#a371f7,stroke:#000,color:white;
+    classDef s3 fill:#f78166,stroke:#000,color:white;
+
+    class DMS dms;
+    class Kinesis kinesis;
+    class Firehose firehose;
+    class Lambda lambda;
+    class S3 s3;
+```
+
 <details>
     <summary>Click to view the detailed explaination</summary>
 
