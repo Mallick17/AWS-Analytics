@@ -4073,3 +4073,615 @@ From here, your selected tables stream to S3 tables in real-time—query live ch
 </details>
 
 ---
+
+## Cost of Various services per 1000 writes, 2000 writes and 4000 Writes/Sec
+
+<details>
+    <summary>Click to view the costs explained</summary>
+
+```sh
+# AWS Database Migration Service
+# AWS Database Migration Service Serverless
+Region - Asia Pacific Mumbai
+# DMS Serverless
+Number of DMS Capacity Units (DCUs) = 1 (DMS Serverless is priced in DMS Capacity Units (DCUs). One DCU is equal to 2GB RAM.)
+Single Availability Zone: 730 hours in a month x 0.113289353 USD = 82.70 USD
+Multiple Availability Zone: 730 hours in a month x 0.226578706 USD = 165.40 USD
+# DMS Homogeneous Data Migrations
+# Amazon Web Services DMS offers built-in native tooling with automatic scaling, making this the ideal choice for a seamless database migration between like database engines. DMS homogeneous data migrations are priced by the hour and billed per second. You are charged from the time that the migration starts to when it completes for a full-load migration or to when you stop a continuous replication.
+1 hours x 0.13 USD = 0.13 USD
+
+# Total Cost for Single AZ: 
+Homogeneous Data Migrations (Monthly): 0.13
+Database Migration Serverless (Monthly): 82.70
+Total Monthly cost: 82.83 USD
+
+# Total Cost for Multi AZ:
+Homogeneous Data Migrations (Monthly): 0.13
+Database Migration Serverless (Monthly): 165.40
+Total Monthly cost: 165.53 USD
+
+***
+
+# AWS Database Migration Service On-Demand Instances
+Region - Asia Pacific Mumbai
+# Select On-Demand instances
+Number of instances : 1
+Selected Instance: t3.large, vCPU: 2, Memory: 8 GiB, Storage: EBS Only
+Single Availability Zone: 1 instance(s) x 0.213 USD hourly x 730 hours in a month = 155.4900 USD (Database Migration Service Cost)
+Multiple Availability Zone: 1 instance(s) x 0.426 USD hourly x 730 hours in a month = 310.9800 USD (Database Migration Service Cost)
+# Storage
+# Single Availability Zone:
+General Purpose SSD (gp2): 1 instance(s) x 100 GB x 0.114 USD = 11.40 USD (Storage cost single AZ)
+# Multiple Availability Zone:
+General Purpose SSD (gp2): 1 instance(s) x 100 GB x 0.228 USD = 22.80 USD (Storage cost multiple AZ)
+
+# Total Cost for Single AZ: 
+Database Migration (Monthly): 155.49
+Storage pricing (Monthly): 11.40
+Total Monthly cost: 166.89 USD
+
+# Total Cost for Multi AZ:
+Database Migration (Monthly): 310.98
+Storage pricing (Monthly): 22.80
+Total Monthly cost: 333.78 USD
+--------------------------------------------------------------------------------------------------------------------------------------
+# Amazon Managed Streaming for Apache Kafka (MSK)
+Region - Asia Pacific Mumbai
+# MSK Provisioned
+# Broker instances
+Number of Kafka broker nodes: 3
+Instance Type: t3.small(vCPU: 2, Memory (GiB): 2)
+3 instance(s) x 0.0491 USD hourly x 730 hours in a month = 107.5290 USD (MSK Cost)
+MSK broker instance charges (monthly): 107.53 USD
+# Storage(No Slabs)
+Storage per Broker: 1 GB
+3 broker nodes x 1 GB x 0.114 USD = 0.342 USD (Storage cost)
+Storage cost (monthly): 0.34 USD
+# Data Transfer(Slabs Present)
+Inbound Data Transfer: Free
+Intra-Region Data Transfer: (1 GB x 0.01 USD per GB outbound) + (1 GB x 0.01 USD per GB inbound) = 0.02 USD
+Outbound Data Transfer to the Internet: 1 GB x 0.1093 USD per GB = 0.11 USD
+Data Transfer cost (monthly): 0.13 USD
+--------------------------------------------------------------------------------------------------------------------------------------
+For 1000 Writes/Sec
+--------------------------------------------------------------------------------------------------------------------------------------
+## 1,000 Writes per Second
+
+### AWS Database Migration Service Serverless  
+Region - Asia Pacific Mumbai  
+Number of DMS Capacity Units (DCUs) = 1 (2GB RAM)  
+- Single Availability Zone: 730 hours × 0.113289353 USD = 82.70 USD  
+- Multiple Availability Zone: 730 hours × 0.226578706 USD = 165.40 USD  
+### DMS Homogeneous Data Migrations  
+- 1 hour × 0.13 USD = 0.13 USD  
+### Total Cost for Single AZ:  
+0.13 (Homogeneous Migration) + 82.70 (Serverless) = **82.83 USD**  
+### Total Cost for Multiple AZ:  
+0.13 + 165.40 = **165.53 USD**  
+
+***
+
+### AWS Database Migration Service On-Demand Instances  
+Region - Asia Pacific Mumbai  
+Number of instances: 1  
+Selected Instance: t3.large (2 vCPU, 8 GiB RAM)  
+- Single Availability Zone: 1 instance × 0.213 USD/hr × 730 hours = 155.49 USD  
+- Multiple Availability Zone: 1 instance × 0.426 USD/hr × 730 hours = 310.98 USD  
+#### Storage  
+- Single AZ: 1 instance × 100 GB × 0.114 USD = 11.40 USD  
+- Multiple AZ: 1 instance × 100 GB × 0.228 USD = 22.80 USD  
+### Total Cost for Single AZ:  
+155.49 + 11.40 = **166.89 USD**  
+### Total Cost for Multiple AZ:  
+310.98 + 22.80 = **333.78 USD** 
+--------------------------------------------------------------------------------------------------------------------------------------
+# Amazon Managed Streaming for Apache Kafka (MSK)  
+Region - Asia Pacific Mumbai  
+# MSK Provisioned  
+# Broker Instances  
+Number of Kafka broker nodes: 3  
+Instance Type: t3.small (vCPU: 2, Memory (GiB): 2)  
+3 instance(s) × 0.0491 USD hourly × 730 hours in a month = 107.53 USD (MSK Cost)  
+MSK broker instance charges (monthly): 107.53 USD  
+# Storage (No Slabs)  
+Storage per Broker: 1 GB  
+3 broker nodes × 1 GB × 0.114 USD = 0.34 USD (Storage cost)  
+Storage cost (monthly): 0.34 USD  
+# Data Transfer (Slabs Present)  
+Inbound Data Transfer: Free  
+Intra-Region Data Transfer: (1 GB × 0.01 USD per GB outbound) + (1 GB × 0.01 USD per GB inbound) = 0.02 USD  
+Outbound Data Transfer to the Internet: 1 GB × 0.1093 USD per GB = 0.11 USD  
+Data Transfer cost (monthly): 0.13 USD  
+# Total Cost (Monthly):  
+107.53 USD (Broker Instances) + 0.34 USD (Storage) + 0.13 USD (Data Transfer) = **107.99 USD**
+
+***
+
+# Amazon MSK Serverless  
+Region - Asia Pacific Mumbai  
+# Throughput  
+Assuming 2.5 TB data ingested monthly (~86 MB/s sustained for 1 KB events × 1000 writes/sec)  
+# Write Throughput  
+2,592 GB × $0.21 per GB incoming data = 544.32 USD (Ingested data cost)  
+# Storage  
+Storage cost included in throughput pricing for MSK Serverless (no additional charge)  
+# Data Transfer Out (Analytics Fetch)  
+Assuming 30% of data read externally:  
+2,592 GB × 30% × $0.02 per GB = 15.55 USD  
+# Total Cost (Monthly):  
+544.32 USD (throughput) + 15.55 USD (data out) = **559.87 USD**
+
+***
+
+# Amazon MSK Connect  
+Region - Asia Pacific Mumbai  
+# Connect Workers  
+2 Workers × 0.205 USD/hr × 730 hrs = 299.30 USD (Worker hourly cost)  
+# Data Transfer Out  
+Assuming 30% consumption by analytics:  
+2,592 GB × 30% × 0.02 USD = 15.55 USD  
+# Total Cost (Monthly):  
+299.30 USD (Workers) + 15.55 USD (Data Out) = **314.85 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+# S3 Table (Real-Time CDC Writes)  
+Region - Asia Pacific Mumbai  
+# Write Events  
+Number of Rows: 2,592,000,000 rows/month (1,000 writes/sec)  
+Average Row Size: 1 KB  
+Total Data Written: 2,592 GB (≈ 2.53 TB)  
+# Storage  
+2,592 GB x 0.0265 USD per GB = 68.69 USD per month (Storage cost)  
+# PUT Requests  
+2,592,000,000 rows ÷ 1,000 x 0.15 USD per 1,000 PUTs = 388.80 USD per month (PUT request cost)  
+# GET Requests  
+Estimate 1 million GET requests (system/app reads) x 0.005 USD per 1,000 GETs = 5.00 USD per month (GET request cost)  
+# S3 Table Metadata/Compaction Charges  
+Metadata Operations: ~3 USD per month (minor object management, table metadata)  
+Compaction - Objects Processed: ~0.06 USD per month  
+Compaction - Data Processed: ~0.73 USD per month  
+# Data Transfer In  
+Inbound Data Transfer: Free  
+# Data Transfer Out (For Analytics Tools Fetch)  
+Assuming 30% of data accessed monthly by analytics:  
+2,592 GB x 30% x 0.02 USD per GB = 15.55 USD per month  
+# Total Cost for S3 Table (Monthly):  
+68.69 (Storage) + 388.80 (PUTs) + 5.00 (GETs) + 3.00 (Metadata) + 0.06 (Compaction objects) + 0.73 (Compaction data) + 15.55 (Data Out)  
+= **481.83 USD**
+--------------------------------------------------------------------------------------------------------------------------------------
+# Debezium on EC2 (Self-Managed)  
+Region - Asia Pacific Mumbai  
+# Compute  
+2 x t3.large × 0.106 USD/hr × 730 hrs = 154.76 USD  
+# Storage  
+200 GB EBS × 0.114 USD = 22.80 USD  
+# Data Transfer Out  
+EC2 to analytics tools (assume 30% consumed):  
+2,592 GB × 30% × 0.02 USD = 15.55 USD  
+# Total Cost (Monthly):  
+154.76 + 22.80 + 15.55 = **193.11 USD**
+
+***
+
+# Debezium on MSK Connect  
+Region - Asia Pacific Mumbai  
+# Connect Workers  
+2 × 0.205 USD/hr × 730 hrs = 299.30 USD  
+# Data Transfer Out  
+Same assumption:  
+15.55 USD  
+# Total Cost (Monthly):  
+299.30 + 15.55 = **314.85 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+# Kinesis Data Streams  
+Region - Asia Pacific Mumbai  
+# Shard Hours  
+2 shards × 0.018 USD/hr × 730 hrs = 26.28 USD  
+# PUT Payload Units  
+2,592,000,000 writes ÷ 1,000,000 × 0.021 USD per 1M PUTs = 54.43 USD  
+# Data Transfer In  
+Inbound Data Transfer: Free  
+# Data Transfer Out (Assuming 30%)  
+2,592 GB × 30% × 0.02 USD per GB = 15.55 USD  
+# Total Cost (Monthly):  
+26.28 USD (shard hours) + 54.43 USD (PUT payload) + 15.55 USD (data out) = **96.26 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Kinesis Data Firehose  
+Region - Asia Pacific Mumbai  
+# Data Ingestion  
+Total Data Ingested: 2,592 GB  
+2,592 GB × 0.035 USD per GB = 90.72 USD (Ingestion cost)  
+# S3 Delivery Requests  
+Number of records: 2,592,000,000 (1,000 writes/sec × 86,400 sec/day × 30 days)  
+2,592,000,000 ÷ 1,000 × 0.04 USD = 103.68 USD (S3 delivery request cost)  
+# Data Transfer In  
+Inbound Data Transfer: Free  
+# Data Transfer Out (For Analytics Fetch)  
+Assuming 30% of data accessed monthly by analytics tools:  
+2,592 GB × 30% × 0.02 USD per GB = 15.55 USD (Data transfer out cost)  
+# Total Cost for Kinesis Data Firehose (Monthly):  
+90.72 USD (Ingestion) + 103.68 USD (S3 Delivery) + 15.55 USD (Data Transfer Out) = **209.95 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Amazon S3 (Direct Storage)  
+Region - Asia Pacific Mumbai  
+# Storage  
+2,592 GB × 0.025 USD per GB = 64.80 USD per month (Storage cost)  
+# PUT Requests (if not using S3 Table)  
+2,592,000,000 PUT requests ÷ 1,000 × 0.0054 USD per 1,000 PUTs = 13,996.80 USD (PUT requests cost—typically avoided with S3 Table usage)  
+# GET Requests  
+Estimate 1 million GET requests × 0.00043 USD per 1,000 GETs = 0.43 USD per month (GET requests cost)  
+# Data Transfer In  
+Inbound Data Transfer: Free  
+# Data Transfer Out (Analytics Fetch)  
+Assuming 30% of data accessed monthly by analytics tools:  
+2,592 GB × 30% × 0.02 USD per GB = 15.55 USD per month (Data transfer out cost)  
+# Total Cost for Amazon S3 (Monthly):  
+64.80 USD (Storage) + 13,996.80 USD (PUT requests) + 0.43 USD (GETs) + 15.55 USD (Data Transfer Out) = **14,077.58 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------  
+For 2000 Writes/Sec  
+--------------------------------------------------------------------------------------------------------------------------------------  
+## 2,000 Writes per Second  
+For DMS Serverless:  
+Assuming linear scaling and doubling DCUs to 2 (4GB RAM)  
+### DMS Serverless  
+- Single AZ: 730 × 2 × 0.113289353 = 165.40 USD  
+- Multiple AZ: 730 × 2 × 0.226578706 = 330.80 USD  
+### Homogeneous Data Migrations  
+Treat migration duration constant: 1 hour × 0.13 USD = 0.13 USD  
+### Total Cost for Single AZ:  
+165.40 + 0.13 = **165.53 USD**  
+### Total Cost for Multiple AZ:  
+330.80 + 0.13 = **330.93 USD**  
+
+***
+
+### DMS On-Demand Instances  
+Assuming increase to 2 instances for load  
+- Single AZ: 2 × 0.213 × 730 = 310.98 USD  
+- Multiple AZ: 2 × 0.426 × 730 = 621.96 USD  
+#### Storage  
+- Single AZ: 2 × 100 GB × 0.114 = 22.80 USD  
+- Multiple AZ: 2 × 100 GB × 0.228 = 45.60 USD  
+### Total Cost for Single AZ:  
+310.98 + 22.80 = **333.78 USD**  
+### Total Cost for Multiple AZ:  
+621.96 + 45.60 = **667.56 USD** 
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+# Amazon Managed Streaming for Apache Kafka (MSK)  
+Region - Asia Pacific Mumbai  
+# MSK Provisioned  
+# Broker Instances  
+Number of Kafka broker nodes: 3 (assuming same config accommodates 2,000 TPS)  
+Instance Type: t3.small (vCPU: 2, Memory (GiB): 2)  
+3 instance(s) × 0.0491 USD hourly × 730 hours in a month = 107.53 USD (MSK Cost)  
+MSK broker instance charges (monthly): 107.53 USD  
+# Storage (No Slabs)  
+Storage per Broker: 1 GB × 2 (approximate doubling data size) = 2 GB  
+3 broker nodes × 2 GB × 0.114 USD = 0.68 USD (Storage cost)  
+Storage cost (monthly): 0.68 USD  
+# Data Transfer (Slabs Present)  
+Inbound Data Transfer: Free  
+Intra-Region Data Transfer: (2 GB × 0.01 USD per GB outbound) + (2 GB × 0.01 USD per GB inbound) = 0.04 USD  
+Outbound Data Transfer to the Internet: 2 GB × 0.1093 USD per GB = 0.22 USD  
+Data Transfer cost (monthly): 0.26 USD  
+# Total Cost (Monthly):  
+107.53 USD (Broker Instances) + 0.68 USD (Storage) + 0.26 USD (Data Transfer) = **108.47 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Amazon MSK Serverless  
+Region - Asia Pacific Mumbai  
+# Throughput  
+Assuming 5.18 TB data ingested monthly (~86 MB/s × 2 KB events × 2000 writes/sec)  
+# Write Throughput  
+5,184 GB × $0.21 per GB incoming data = 1,088.64 USD (Ingested data cost)  
+# Storage  
+Storage cost included in throughput pricing for MSK Serverless (no additional charge)  
+# Data Transfer Out (Analytics Fetch)  
+Assuming 30% of data read externally:  
+5,184 GB × 30% × $0.02 per GB = 31.10 USD  
+# Total Cost (Monthly):  
+1,088.64 USD (throughput) + 31.10 USD (data out) = **1,119.74 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Amazon MSK Connect  
+Region - Asia Pacific Mumbai  
+# Connect Workers  
+Scaling same 2 Workers basis if they handle 2000 writes/sec:  
+2 Workers × 0.205 USD/hr × 730 hrs = 299.30 USD (Worker hourly cost)  
+# Data Transfer Out  
+Assuming 30% consumption by analytics:  
+5,184 GB × 30% × 0.02 USD = 31.10 USD  
+# Total Cost (Monthly):  
+299.30 USD (Workers) + 31.10 USD (Data Out) = **330.40 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# S3 Table (Real-Time CDC Writes)  
+Region - Asia Pacific Mumbai  
+# Write Events  
+Number of Rows: 5,184,000,000 rows/month (2,000 writes/sec)  
+Average Row Size: 1 KB  
+Total Data Written: 5,184 GB (≈ 5.06 TB)  
+# Storage  
+5,184 GB x 0.0265 USD per GB = 137.39 USD per month (Storage cost)  
+# PUT Requests  
+5,184,000,000 rows ÷ 1,000 x 0.15 USD per 1,000 PUTs = 777.60 USD per month (PUT request cost)  
+# GET Requests  
+Estimate 2 million GET requests (system/app reads) x 0.005 USD per 1,000 GETs = 10.00 USD per month (GET request cost)  
+# S3 Table Metadata/Compaction Charges  
+Metadata Operations: ~6 USD per month (minor object management, table metadata)  
+Compaction - Objects Processed: ~0.12 USD per month  
+Compaction - Data Processed: ~1.46 USD per month  
+# Data Transfer In  
+Inbound Data Transfer: Free  
+# Data Transfer Out (For Analytics Tools Fetch)  
+Assuming 30% of data accessed monthly by analytics:  
+5,184 GB × 30% × 0.02 USD per GB = 31.10 USD per month  
+# Total Cost for S3 Table (Monthly):  
+137.39 + 777.60 + 10.00 + 6 + 0.12 + 1.46 + 31.10 = **963.67 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Debezium on EC2 (Self-Managed)  
+Region - Asia Pacific Mumbai  
+# Compute  
+Scaling linearly, 4 x t3.large × 0.106 USD/hr × 730 hrs = 309.52 USD  
+# Storage  
+400 GB EBS × 0.114 USD = 45.60 USD  
+# Data Transfer Out  
+2x data consumed:  
+5,184 GB × 30% × 0.02 USD = 31.10 USD  
+# Total Cost (Monthly):  
+309.52 + 45.60 + 31.10 = **386.22 USD**
+
+***
+
+# Debezium on MSK Connect  
+Region - Asia Pacific Mumbai  
+# Connect Workers  
+Assuming double workers for scale:  
+4 × 0.205 USD/hr × 730 hrs = 598.60 USD  
+# Data Transfer Out  
+31.10 USD  
+# Total Cost (Monthly):  
+598.60 + 31.10 = **629.70 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Kinesis Data Streams  
+Region - Asia Pacific Mumbai  
+# Shard Hours  
+4 shards × 0.018 USD/hr × 730 hrs = 52.56 USD  
+# PUT Payload Units  
+5,184,000,000 writes ÷ 1,000,000 × 0.021 USD = 108.86 USD  
+# Data Transfer In  
+Inbound Data Transfer: Free  
+# Data Transfer Out (Assuming 30%)  
+5,184 GB × 30% × 0.02 USD = 31.10 USD  
+# Total Cost (Monthly):  
+52.56 + 108.86 + 31.10 = **192.52 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Kinesis Data Firehose  
+Region - Asia Pacific Mumbai  
+# Data Ingestion  
+Total Data Ingested: 5,184 GB  
+5,184 GB × 0.035 USD per GB = 181.44 USD  
+# S3 Delivery Requests  
+Number of records: 5,184,000,000 (2,000 writes/sec × 86,400 sec/day × 30 days)  
+5,184,000,000 ÷ 1,000 × 0.04 USD = 207.36 USD  
+# Data Transfer In  
+Inbound Data Transfer: Free  
+# Data Transfer Out (For Analytics Fetch)  
+5,184 GB × 30% × 0.02 USD per GB = 31.10 USD  
+# Total Cost for Kinesis Data Firehose (Monthly):  
+181.44 + 207.36 + 31.10 = **419.90 USD**
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Amazon S3 (Direct Storage)  
+Region - Asia Pacific Mumbai  
+# Storage  
+5,184 GB × 0.025 USD per GB = 129.60 USD  
+# PUT Requests (if not using S3 Table)  
+5,184,000,000 PUT requests ÷ 1,000 × 0.0054 USD = 27,993.60 USD  
+# GET Requests  
+2 million GET requests × 0.00043 USD per 1,000 = 0.86 USD  
+# Data Transfer In  
+Inbound Data Transfer: Free  
+# Data Transfer Out (Analytics Fetch)  
+5,184 GB × 30% × 0.02 USD = 31.10 USD  
+# Total Cost (Storage + Requests + Data Out):  
+129.60 + 27,993.60 + 0.86 + 31.10 = **28,155.16 USD**
+--------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------  
+For 4000 Writes/Sec  
+--------------------------------------------------------------------------------------------------------------------------------------  
+## 4,000 Writes per Second  
+For DMS Serverless:  
+Assuming DCUs scale to 4 (8GB RAM)  
+### DMS Serverless  
+- Single AZ: 730 × 4 × 0.113289353 = 330.80 USD  
+- Multiple AZ: 730 × 4 × 0.226578706 = 661.60 USD  
+### Homogeneous Data Migrations  
+1 hour × 0.13 USD = 0.13 USD  
+### Total Cost for Single AZ:  
+330.80 + 0.13 = **330.93 USD**  
+### Total Cost for Multiple AZ:  
+661.60 + 0.13 = **661.73 USD** 
+
+***
+
+### DMS On-Demand Instances  
+4 instances assumed  
+- Single AZ: 4 × 0.213 × 730 = 621.96 USD  
+- Multiple AZ: 4 × 0.426 × 730 = 1,243.92 USD  
+#### Storage  
+- Single AZ: 4 × 100 GB × 0.114 = 45.60 USD  
+- Multiple AZ: 4 × 100 GB × 0.228 = 91.20 USD  
+### Total Cost for Single AZ:  
+621.96 + 45.60 = **667.56 USD**  
+### Total Cost for Multiple AZ:  
+1,243.92 + 91.20 = **1,335.12 USD**  
+
+--------------------------------------------------------------------------------------------------------------------------------------
+# Amazon Managed Streaming for Apache Kafka (MSK)  
+Region - Asia Pacific Mumbai  
+# MSK Provisioned  
+# Broker Instances  
+Number of Kafka broker nodes: 3 (assuming same config accommodates 4,000 TPS)  
+Instance Type: t3.small (vCPU: 2, Memory (GiB): 2)  
+3 instance(s) × 0.0491 USD hourly × 730 hours in a month = 107.53 USD  
+MSK broker instance charges (monthly): 107.53 USD  
+# Storage (No Slabs)  
+Storage per Broker: 4 GB (linear scale)  
+3 broker nodes × 4 GB × 0.114 USD = 1.37 USD (Storage cost)  
+Storage cost (monthly): 1.37 USD  
+# Data Transfer (Slabs Present)  
+Inbound Data Transfer: Free  
+Intra-Region Data Transfer: (4 GB × 0.01 USD outbound) + (4 GB × 0.01 USD inbound) = 0.08 USD  
+Outbound Data Transfer to the Internet: 4 GB × 0.1093 USD = 0.44 USD  
+Data Transfer cost (monthly): 0.52 USD  
+# Total Cost (Monthly):  
+107.53 USD + 1.37 USD + 0.52 USD = **109.42 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Amazon MSK Serverless  
+Region - Asia Pacific Mumbai  
+# Throughput  
+Assuming 10.37 TB data ingested monthly (~86 MB/s × 4 KB events × 4,000 writes/sec)  
+# Write Throughput  
+10,368 GB × $0.21 per GB = 2,177.28 USD  
+# Storage  
+Included in throughput pricing  
+# Data Transfer Out (Analytics Fetch)  
+30% data read externally:  
+10,368 GB × 30% × 0.02 USD = 62.20 USD  
+# Total Cost (Monthly):  
+2,177.28 USD + 62.20 USD = **2,239.48 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Amazon MSK Connect  
+Region - Asia Pacific Mumbai  
+# Connect Workers  
+Assuming 4 Workers (doubling from 2, due to scaling):  
+4 × 0.205 USD/hr × 730 hrs = 598.60 USD  
+# Data Transfer Out  
+62.20 USD  
+# Total Cost (Monthly):  
+598.60 USD + 62.20 USD = **660.80 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# S3 Table (Real-Time CDC Writes)  
+Region - Asia Pacific Mumbai  
+# Write Events  
+Number of Rows: 10,368,000,000 rows/month (4,000 writes/sec)  
+Average Row Size: 1 KB  
+Total Data Written: 10,368 GB (~ 10.12 TB)  
+# Storage  
+10,368 GB × 0.0265 USD = 274.78 USD  
+# PUT Requests  
+10,368M ÷ 1,000 × 0.15 USD = 1,555.20 USD  
+# GET Requests  
+Estimate 4 million GET requests × 0.005 USD per 1,000 = 20.00 USD  
+# Metadata/Compaction  
+Metadata Operations: ~12 USD  
+Compaction - Objects Processed: ~0.24 USD  
+Compaction - Data Processed: ~2.92 USD  
+# Data Transfer In  
+Free  
+# Data Transfer Out (Analytics Fetch)  
+10,368 GB × 30% × 0.02 USD = 62.20 USD  
+# Total Cost (Monthly):  
+274.78 + 1,555.20 + 20 + 12 + 0.24 + 2.92 + 62.20 = **1,927.34 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Debezium on EC2 (Self-Managed)  
+Region - Asia Pacific Mumbai  
+# Compute  
+8 x t3.large × 0.106 USD/hr × 730 hrs = 619.04 USD  
+# Storage  
+800 GB EBS × 0.114 USD = 91.20 USD  
+# Data Transfer Out  
+62.20 USD  
+# Total Cost (Monthly):  
+619.04 + 91.20 + 62.20 = **772.44 USD**
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Debezium on MSK Connect  
+Region - Asia Pacific Mumbai  
+# Connect Workers  
+8 × 0.205 USD/hr × 730 hrs = 1,197.20 USD  
+# Data Transfer Out  
+62.20 USD  
+# Total Cost (Monthly):  
+1,197.20 + 62.20 = **1,259.40 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Kinesis Data Streams  
+Region - Asia Pacific Mumbai  
+# Shard Hours  
+8 shards × 0.018 USD/hr × 730 hrs = 105.12 USD  
+# PUT Payload Units  
+10,368M ÷ 1,000,000 × 0.021 USD = 217.72 USD  
+# Data Transfer In  
+Free  
+# Data Transfer Out (Assuming 30%)  
+10,368 GB × 30% × 0.02 USD = 62.20 USD  
+# Total Cost (Monthly):  
+105.12 + 217.72 + 62.20 = **385.04 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Kinesis Data Firehose  
+Region - Asia Pacific Mumbai  
+# Data Ingestion  
+10,368 GB × 0.035 USD = 362.88 USD  
+# S3 Delivery Requests  
+10,368M ÷ 1,000 × 0.04 USD = 414.72 USD  
+# Data Transfer In  
+Free  
+# Data Transfer Out  
+62.20 USD  
+# Total Cost (Monthly):  
+362.88 + 414.72 + 62.20 = **839.80 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Amazon S3 (Direct Storage)  
+Region - Asia Pacific Mumbai  
+# Storage  
+10,368 GB × 0.025 USD = 259.20 USD  
+# PUT Requests (if not using S3 Table)  
+10,368M ÷ 1,000 × 0.0054 USD = 55,987.20 USD  
+# GET Requests  
+4M × 0.00043 USD per 1,000 = 1.72 USD  
+# Data Transfer In  
+Free  
+# Data Transfer Out  
+62.20 USD  
+# Total Cost (Monthly):  
+259.20 + 55,987.20 + 1.72 + 62.20 = **56,310.32 USD**
+
+--------------------------------------------------------------------------------------------------------------------------------------
+```
+    
+</details>
