@@ -4756,8 +4756,24 @@ mysql> show variables like 'log_bin';
 
 </details>
 
+---
 
+## 2. Debezium(MSK Connect)
+- I have to create a custom plugin for MSK Connect. A custom plugin is a set of JAR files that contain the implementation of one or more connectors, transforms, or converters. Amazon MSK will install the plugin on the workers of the connect cluster where the connector is running.
+- From the [Debezium website](https://debezium.io/releases/), I download the MySQL connector plugin for the latest stable release. Because MSK Connect accepts custom plugins in ZIP or JAR format, I convert the downloaded archive to ZIP format and keep the JARs files in the main directory:
+```sh
+jar xf antlr4-runtime-4.10.1.jar ## or unzip antlr4-runtime-4.10.1.jar
+cd debezium-connector-mysql
+tar xzf debezium-connector-mysql-3.3.1.Final-plugin.tar.gz
+cd debezium-connector-mysql
+zip -9 ../debezium-connector-mysql-3.3.1.zip *
+```
+- Then, I use the AWS CLI or Console to upload the custom plugin to an Amazon Simple Storage Service (Amazon S3) bucket in the same AWS Region I am using for MSK Connect.
+```
+aws s3 cp debezium-connector-mysql-3.3.1.zip s3://my-bucket/path/
+```
 
+---
 
 
 
