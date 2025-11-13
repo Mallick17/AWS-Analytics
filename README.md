@@ -4685,3 +4685,34 @@ Free
 ```
     
 </details>
+
+---
+
+# Setup of RDS - Debezium(MSK Connect) - Kafka(MSK) - S3 Sink Connector(MSK Connect) - S3 Apache Iceberg Table
+
+## 1. RDS
+- By default, binary logging is turned off for Aurora MySQL-Compatible.
+- To confirm that binary logging is turned off on your DB cluster, run the following command:
+```
+mysql> show variables like 'log_bin';
+```
+- Example output:
+```
++----------------+------------+  
+| Variable_name  | Value      |  
++----------------+------------+  
+| log_bin        | OFF        |  
++----------------+------------+
+```
+
+- If binary logging is turned off, then turn on binary logging.
+
+
+
+
+
+
+
+
+
+
