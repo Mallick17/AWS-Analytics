@@ -4706,10 +4706,52 @@ mysql> show variables like 'log_bin';
 ```
 
 - If binary logging is turned off, then turn on binary logging.
+- To enable binary logging (binlog) in Amazon RDS MySQL, you need to modify the DB parameter group associated with your RDS instance. Binary logging is required for features like replication, point-in-time recovery, and Change Data Capture (CDC) using tools like Debezium.
+
+<details>
+    <summary>Click to view the Steps to Enable Binlog in RDS MySQL</summary>
+
+### Steps to Enable Binlog in RDS MySQL
+
+1. **Create or Modify a DB Parameter Group**
+   - Go to the AWS RDS console.
+   - Navigate to **Parameter Groups**.
+   - Either create a new parameter group or select an existing one that matches your MySQL version.
+   - Edit the following parameters:
+     - `log_bin`: Set to `1` to enable binary logging.
+     - `binlog_format`: Set to `ROW` for CDC and replication (recommended for Debezium).
+     - `binlog_row_image`: Set to `FULL` for complete row images (required for CDC).
+     - `expire_logs_days`: Set the retention period for binlogs (e.g., `7` for 7 days).
+     - `binlog_checksum`: Set to `NONE` (required for RDS MySQL).
+
+2. **Apply the Parameter Group to Your RDS Instance**
+   - Go to your RDS instance in the console.
+   - Modify the instance and select the parameter group you just created or updated.
+   - Apply the changes. This may require a reboot.
+
+3. **Reboot the Instance**
+   - After applying the parameter group, reboot the RDS instance for the changes to take effect.
+
+4. **Verify Binlog is Enabled**
+   - Connect to your MySQL instance using a client.
+   - Run the following command:
+     ```sql
+     SHOW VARIABLES LIKE 'log_bin';
+     ```
+     - If enabled, it should return `ON`.
+   - Check the binlog format:
+     ```sql
+     SHOW VARIABLES LIKE 'binlog_format';
+     ```
+     - Should return `ROW`.
 
 
+> Notes:
+> Binary logging cannot be enabled on RDS MySQL instances using the default parameter group; you must use a custom parameter group.
+> Enabling binlog increases storage usage and may impact performance slightly, especially with high write loads.
+> For CDC and replication, ensure your RDS instance has sufficient storage and IOPS to handle the binlog growth.
 
-
+</details>
 
 
 
