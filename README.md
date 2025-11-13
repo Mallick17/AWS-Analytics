@@ -4707,6 +4707,7 @@ mysql> show variables like 'log_bin';
 
 - If binary logging is turned off, then turn on binary logging.
 - To enable binary logging (binlog) in Amazon RDS MySQL, you need to modify the DB parameter group associated with your RDS instance. Binary logging is required for features like replication, point-in-time recovery, and Change Data Capture (CDC) using tools like Debezium.
+> The essential condition for enabling binlog on RDS MySQL is that automated backups must be enabled with a non-zero retention period. AWS manages log_bin internally and binary logging is only turned on if automated backups are active. When backups are disabled (retention set to zero), binary logging is also disabled regardless of binlog_format or binlog_row_image settings.
 
 <details>
     <summary>Click to view the Steps to Enable Binlog in RDS MySQL</summary>
@@ -4715,6 +4716,8 @@ mysql> show variables like 'log_bin';
 
 1. **Create or Modify a DB Parameter Group**
    - Go to the AWS RDS console.
+   - So to enable binlog if it is disabled:
+     - Ensure automated backups are enabled (retention period > 0).
    - Navigate to **Parameter Groups**.
    - Either create a new parameter group or select an existing one that matches your MySQL version.
    - Edit the following parameters:
