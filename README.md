@@ -4775,5 +4775,339 @@ aws s3 cp debezium-connector-mysql-3.3.1.zip s3://my-bucket/path/
 
 ---
 
+Perfect — your RDS and Debezium plugin setup is ready. The next steps are all about **connecting Debezium to MSK Connect, creating the connector, and sending CDC events to MSK (Kafka topics)**. I’ll break it down carefully so you can do it in AWS safely.
 
+---
+
+## 3. Create MSK Connect Connector for Debezium MySQL
+
+1. **Go to the MSK Connect Console**
+
+   * Console → **MSK Connect → Custom Plugins**
+   * You already uploaded `debezium-connector-mysql-3.3.1.zip` to S3.
+   * Create a **new custom plugin** in MSK Connect pointing to that S3 ZIP.
+   * This allows your connector to use the Debezium MySQL connector JARs.
+
+2. **Create a Connector**
+
+   * In MSK Connect → **Create connector**
+   * Select **Custom plugin** → choose the Debezium MySQL plugin you just uploaded.
+   * Choose **Connector type**: `Source connector` (because we are reading from MySQL/RDS).
+
+3. **Configuration JSON**
+
+   * Here is where all the configuration we discussed comes in.
+   * Create a JSON file (or paste into the console) containing **all the Debezium MySQL parameters**, plus Kafka Connect offsets, transforms, DLQ, etc.
+
+### Example JSON for your RDS → MSK pipeline
+
+```json
+{
+  "name": "mysql-cdc-connector",
+  "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+  "tasks.max": "1",
+
+  "database.hostname": "mydb-rds.cluster-xyz.ap-south-1.rds.amazonaws.com",
+  "database.port": "3306",
+  "database.user": "debezium",
+  "database.password": "yourpassword",
+  "database.server.id": "5400",
+  "database.server.name": "mysqlcdc",
+  "database.include.list": "yourdb",
+
+  "table.include.list": "yourdb.table1,yourdb.table2",
+  "column.include.list": "yourdb.table1.col1,yourdb.table1.col2",
+  "include.schema.changes": "true",
+
+  "snapshot.mode": "initial",
+  "snapshot.locking.mode": "minimal",
+  "snapshot.fetch.size": "2000",
+
+  "time.precision.mode": "adaptive_time_microseconds",
+  "decimal.handling.mode": "precise",
+  "binary.handling.mode": "base64",
+
+  "heartbeat.interval.ms": "0",
+
+  "database.history.kafka.bootstrap.servers": "b-1.mskcluster:9092,b-2.mskcluster:9092",
+  "database.history.kafka.topic": "schema-changes.yourdb",
+
+  "offset.storage": "org.apache.kafka.connect.storage.KafkaOffsetBackingStore",
+  "offset.storage.topic": "offsets.mysql.cdc",
+  "offset.storage.partitions": "1",
+  "offset.storage.replication.factor": "3",
+  "offset.flush.interval.ms": "60000",
+
+  "errors.tolerance": "all",
+  "errors.deadletterqueue.topic.name": "dlq.mysql",
+  "errors.deadletterqueue.context.headers.enable": "true",
+
+  "max.batch.size": "2048",
+  "max.queue.size": "8192",
+  "poll.interval.ms": "1000",
+
+  "transforms": "unwrap",
+  "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+  "transforms.unwrap.drop.tombstones": "false"
+}
+```
+
+<details>
+    <summary>Click to view almost all the available parameters supported for MSK Connect for Debezium</summary>
+
+# Debezium MySQL Connector Parameters for MSK Connect
+
+**Debezium Version**: Based on the latest stable release as of October 2025, which is Debezium 3.3. This documentation is derived from the official Debezium MySQL connector properties list. Debezium 3.4 is in alpha as of November 2025, so we stick with 3.3 for stability. All information is cross-referenced with AWS MSK Connect documentation, where MSK Connect supports Debezium connectors by uploading the plugin ZIP and providing the connector configuration JSON. 
+
+**Support in MSK Connect**:
+- **Connector-specific parameters** (e.g., `database.hostname`, `snapshot.mode`): Fully supported. These are passed in the connector config JSON when creating the connector in the AWS Console, API, or CLI. MSK Connect runs Kafka Connect under the hood, so all Debezium MySQL connector properties are usable as long as the plugin version matches (e.g., upload Debezium 3.3 plugin ZIP).
+- **Kafka Connect worker-level parameters** (e.g., `rest.port`, `plugin.path`): Partially supported via custom worker configuration in MSK Connect. You can provide a custom properties file uploaded to S3, but some are managed by AWS (e.g., bootstrap.servers is auto-configured to your MSK cluster; you can't override it). Unsupported ones will be ignored or cause errors if they conflict with AWS-managed settings. See AWS docs for custom worker configs.
+- **Producer/Consumer parameters** (e.g., `producer.acks`): Supported as pass-through properties in the connector config (prefixed with `producer.` or `consumer.`). Debezium forwards them to the underlying Kafka clients.
+- **Converter parameters** (e.g., `value.converter`): Supported in connector config.
+- **SMT parameters** (e.g., `transforms.unwrap.type`): Fully supported as part of transforms config.
+- **MSK Connect-specific parameters** (e.g., `aws.worker.instance.type`): Internal to AWS, not user-configurable in connector JSON; set via MSK Connect console/API (e.g., capacity settings).
+- **Unsupported**: Any parameter requiring direct file system access or installation (e.g., custom JARs beyond the plugin); MSK Connect is managed. Also, autoscaling may not work with Debezium MySQL if `tasks.max` >1, as it supports only one task (per AWS docs).
+- **Behavior Notes**: If you set invalid values, the connector will fail to start or log errors. For enums, invalid values cause validation failure. MSK Connect logs are in CloudWatch for debugging.
+
+The list is organized into categories for clarity. Each category has a table with:
+- **Parameter**: Name of the property.
+- **Description**: Detailed explanation.
+- **Type**: Data type (e.g., string, int).
+- **Default**: Default value.
+- **Allowed Values**: Possible values or range.
+- **Behavior Changes**: What happens with different values, including if invalid.
+- **Supported in MSK Connect**: Yes/No, with notes.
+
+Based on Debezium 3.3 docs. There are ~100+ parameters total (connector + pass-through). If a parameter is not listed, it's likely not applicable or deprecated.
+
+## 1. Connector Identity & Basics
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| name | Unique name for the connector instance. Used in logging and topic names. | string | None (required) | Any string | If duplicate, connector fails to start. Invalid characters may cause topic creation issues. | Yes, required in config JSON. |
+| connector.class | Specifies the Java class for the connector. | string | None (required) | io.debezium.connector.mysql.MySqlConnector | Must be this for MySQL; other values fail class loading. | Yes, must match the uploaded plugin. |
+| tasks.max | Maximum number of tasks the connector can use. | int | 1 | 1 (MySQL supports only single task) | >1 causes failures as MySQL binlog reading is not parallelizable; tasks will idle or error. Invalid (non-int) fails validation. | Yes, but AWS recommends 1 for Debezium MySQL; autoscaling incompatible if >1. |
+
+## 2. Database Connection Configs
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| database.hostname | Hostname or IP of the MySQL server. | string | None (required) | Valid hostname/IP | Invalid causes connection failure at startup. Supports RDS endpoints. | Yes, use your RDS/Aurora endpoint. |
+| database.port | Port number of the MySQL server. | int | 3306 | 1-65535 | Invalid port causes connection timeout. Non-int fails validation. | Yes. |
+| database.user | MySQL username with REPLICATION privileges. | string | None (required) | Valid username | Wrong user causes auth failure. Must have REPL CLIENT, REPL SLAVE, SELECT. | Yes, can use Secrets Manager for secure storage. |
+| database.password | Password for the user. | string | None (required) | Any string | Wrong password fails auth. | Yes, mask with Secrets Manager or config provider. |
+| database.server.id | Unique ID for this connector as a replication slave. | long | None (required) | 1 to 2^32-1, unique across replicas | Duplicate ID causes binlog conflicts. Invalid range fails startup. | Yes. |
+| database.server.name | Logical name for the MySQL server/group; prefixes topics. | string | None (required) | Alphanumeric, no hyphens | Invalid chars may break topic names. Used in event sources. | Yes. |
+| database.ssl.mode | SSL connection mode to MySQL. | string | disabled | disabled, preferred, required, verify_ca, verify_identity | disabled: No SSL; preferred: SSL if available; required: Force SSL or fail; verify_ca: Verify CA; verify_identity: Verify hostname matches cert. Invalid fails connection. | Yes, useful for RDS with SSL. |
+| database.ssl.keystore | Path to keystore for SSL. | string | None | File path | If set, uses custom keystore; else system default. Invalid path fails SSL handshake. | No, MSK Connect doesn't support file paths; use AWS-managed SSL. |
+| database.ssl.truststore | Path to truststore for SSL. | string | None | File path | Similar to keystore. | No, same reason. |
+| database.connectionTimeZone | Timezone for JDBC connection. | string | None | Valid TZ like UTC | Affects timestamp handling; wrong TZ causes time drifts in events. | Yes. |
+| database.allowPublicKeyRetrieval | Allows retrieving RSA public key from server (MySQL 8+). | boolean | false | true/false | true: Enables for secure auth; false: May fail on MySQL 8. Invalid fails parsing. | Yes. |
+| connect.timeout.ms | Timeout for establishing DB connection. | int | 30000 | Positive int | Low value: Faster failures; high: Longer waits. Invalid causes default. | Yes. |
+| database.jdbc.driver | JDBC driver class. | string | com.mysql.cj.jdbc.Driver | Valid class | Custom drivers not supported easily. | Yes, but use default. |
+
+## 3. Snapshot Configurations
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| snapshot.mode | Determines how initial snapshot is taken. | string | initial | initial, initial_only, schema_only, schema_only_recovery, never, when_needed, custom | initial: Data + schema + binlog; initial_only: Snapshot then stop; schema_only: Schema only; never: Binlog from current; when_needed: Snapshot missing tables; custom: User class. Invalid mode fails startup. Behavior: 'never' risks missing data if binlog purged. | Yes. |
+| snapshot.locking.mode | Locking strategy during snapshot. | string | minimal | minimal, minimal_permissive, extended, none | minimal: Short locks; extended: Long locks (blocks writes); none: No locks (risk inconsistency); minimal_permissive: Like minimal but skips locks if possible. 'none' may cause inconsistent data if writes occur. | Yes. |
+| snapshot.fetch.size | Rows fetched per batch in snapshot. | int | 10240 | Positive int | Higher: Faster but more memory; low: Slower, less mem. Invalid defaults to 10240. | Yes. |
+| snapshot.max.threads | Parallel threads for snapshot. | int | 1 | 1+ | Higher: Faster for large DBs; but MySQL limits concurrency. >1 may cause lock contention. | Yes, but keep low for MySQL. |
+| snapshot.include.collection.list | Tables to include in snapshot (CSV). | string | All included tables | CSV of db.table | Limits snapshot to these; others skipped. Invalid table names ignore silently. | Yes. |
+| snapshot.new.tables | How to handle new tables during running connector. | string | off | off, parallel | parallel: Snapshots new tables in parallel; off: Ignores. | Yes. |
+| snapshot.lock.consistency | Consistency level for locks. | string | transaction | transaction | Only 'transaction'; others not supported. | Yes. |
+| snapshot.delay.ms | Delay before starting snapshot. | long | 0 | 0+ | Positive: Delays snapshot start. | Yes. |
+
+## 4. Binlog Reading Configs
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| database.include.list | Databases to capture changes from (CSV). | string | None | CSV of DB names | Only these DBs; others ignored. Empty: All. Invalid names skip silently. | Yes. |
+| database.exclude.list | Databases to exclude (CSV). | string | None | CSV | Excludes these; takes precedence over include. | Yes. |
+| table.include.list | Tables to include (CSV). | string | All | CSV db.table | Only these tables. Regex not supported. Invalid ignore. | Yes. |
+| table.exclude.list | Tables to exclude (CSV). | string | None | CSV | Excludes these. | Yes. |
+| column.include.list | Columns to include (CSV). | string | All | CSV db.table.col | Only these columns in events. Others omitted. | Yes. |
+| column.exclude.list | Columns to exclude (CSV). | string | None | CSV | Excludes these columns. | Yes. |
+| include.schema.changes | Emit schema change events. | boolean | true | true/false | true: Writes to schema topic; false: No DDL events. | Yes. |
+| include.query | Include original SQL query in update events. | boolean | false | true/false | true: Adds query field (expensive); false: No. | Yes, but enables large events. |
+| table.ignore.builtin | Ignore MySQL system tables. | boolean | true | true/false | false: Captures mysql.* tables (rarely useful). | Yes. |
+| binlog.buffer.size | Size of binlog event buffer. | int | 0 (unlimited) | 0+ | Limit: Prevents OOM on bursts. | Yes. |
+| binlog.rows.query.log.events | Log row queries in binlog. | boolean | false | true/false | true: Enables in MySQL (requires server config). | Yes, but requires MySQL server change. |
+
+## 5. GTID Configurations
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| gtid.source.includes | GTID sources to include (CSV). | string | All | CSV of UUID patterns | Only these sources; for multi-master. Invalid skip events. | Yes, for GTID-enabled MySQL. |
+| gtid.source.excludes | GTID sources to exclude (CSV). | string | None | CSV | Excludes these. | Yes. |
+| gtid.new.channel.position | Position for new GTID channels. | string | earliest | earliest, latest | earliest: From beginning; latest: From now. Invalid defaults earliest. | Yes. |
+
+## 6. Event & Envelope Format
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| event.deserialization.failure.handling.mode | Handle bad event deserialization. | string | fail | fail, warn, skip | fail: Stop connector; warn: Log and continue; skip: Ignore event. Invalid fails. | Yes. |
+| binary.handling.mode | How to handle BINARY/BLOB fields. | string | bytes | bytes, base64, hex | bytes: Raw bytes; base64/hex: Encoded string. Affects event size/type. | Yes. |
+| decimal.handling.mode | DECIMAL type conversion. | string | precise | precise, double, string | precise: BigDecimal; double: Lossy; string: Exact string. Wrong causes conversion errors. | Yes. |
+| time.precision.mode | Time type precision. | string | adaptive | adaptive, adaptive_time_microseconds, connect | adaptive: Based on column; connect: Kafka Connect types. Affects timestamp accuracy. | Yes. |
+| bigint.unsigned.handling.mode | Handle unsigned BIGINT. | string | long | long, precise | long: Java long (may overflow); precise: BigInteger. | Yes. |
+| tombstones.on.delete | Emit tombstone events on delete. | boolean | true | true/false | false: No null value record on delete (may break compaction). | Yes. |
+
+## 7. Heartbeat / Keepalive
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| heartbeat.interval.ms | Frequency of heartbeat events (ms). | int | 0 (disabled) | 0+ | Positive: Emits to heartbeat topic on idle; helps liveness. High freq increases load. | Yes. |
+| heartbeat.topics.prefix | Prefix for heartbeat topics. | string | __debezium-heartbeat | String | Changes topic name. | Yes. |
+| heartbeat.action.query | Custom SQL for heartbeat action. | string | None | SQL query | Executes on heartbeat; for custom liveness. Invalid SQL errors. | Yes. |
+
+## 8. Filtering Rules
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| column.propagate.source.type | Propagate source column types to schema. | string | None | CSV db.table.col | Adds type metadata to fields. | Yes. |
+| column.mask.with.length.chars | Mask column with fixed length chars. | string | None | CSV with length | e.g., db.table.col:10 masks with **********. | Yes, for PII. |
+| column.mask.hash.v2.hashAlgorithm.with.salt.salt | Hash mask with salt (v2). | string | None | Algorithm:salt | Hashes PII; different salts change hash. | Yes. |
+| column.truncate.to.length.chars | Truncate column to length. | string | None | CSV with length | Shortens strings; longer values truncated. | Yes. |
+| field.name.adjustment.mode | Adjust field names for validity. | string | none | none, avro | avro: Sanitizes for Avro. | Yes. |
+| sanitize.field.names | Sanitize invalid field names. | boolean | false | true/false | true: Replaces invalid chars. | Yes, for converters. |
+
+## 9. Offsets & Storage
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| offset.storage | Class for offset storage. | string | org.apache.kafka.connect.storage.FileOffsetBackingStore | Class name | KafkaOffsetBackingStore: Uses Kafka topic; File: Local file. | Yes, but in MSK, use Kafka-based; file not supported (no FS access). |
+| offset.storage.topic | Topic for offsets. | string | None (required for Kafka store) | Topic name | Must exist or auto-create. Wrong topic loses offsets. | Yes. |
+| offset.storage.partitions | Partitions for offset topic. | int | 25 | 1+ | Higher: Better distribution. | Yes. |
+| offset.storage.replication.factor | Replication for offset topic. | short | 3 | 1+ | Higher: More fault tolerance. | Yes, match MSK cluster. |
+| offset.flush.interval.ms | Flush offsets interval. | long | 60000 | Positive | Lower: More frequent commits, less loss on failure; high: Better perf. | Yes. |
+| offset.flush.timeout.ms | Timeout for flush. | long | 5000 | Positive | High: Longer waits on failure. | Yes, worker config. |
+| database.history.kafka.topic | Topic for schema history. | string | None (required) | Topic name | Stores DDL; must have infinite retention. | Yes. |
+| database.history.kafka.bootstrap.servers | Bootstrap servers for history. | string | None (required) | CSV brokers | In MSK, auto-set but can override in worker. | Partial; MSK auto-configures. |
+| database.history.kafka.recovery.poll.interval.ms | Poll interval for history recovery. | int | 100 | Positive | Adjust for recovery speed. | Yes. |
+| database.history.skip.unparseable.ddl | Skip bad DDL in history. | boolean | false | true/false | true: Continues on errors; false: Fails. | Yes. |
+| database.history.store.only.captured.tables.ddl | Store only captured tables' DDL. | boolean | false | true/false | true: Filters history to included tables. | Yes. |
+
+## 10. Transforms (SMTs)
+
+Transforms are configured with `transforms = name1,name2` and per-transform properties like `transforms.name1.type`.
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| transforms | List of transform names (CSV). | string | None | CSV names | Applies in order; invalid name fails. | Yes. |
+| transforms.<name>.type | Class for the transform. | string | None | e.g., io.debezium.transforms.ExtractNewRecordState | Wrong class fails loading. | Yes. |
+| transforms.unwrap.drop.tombstones | Drop tombstone records (for unwrap). | boolean | true | true/false | false: Keeps null values. | Yes. |
+| transforms.unwrap.add.headers | Add headers from envelope. | string | None | CSV fields | Adds metadata. | Yes. |
+| transforms.route.regex | Regex for topic routing. | string | None | Regex | Routes events to new topics. Invalid regex skips. | Yes. |
+| transforms.route.replacement | Replacement for routing. | string | None | Pattern like $1 | Changes topic names. | Yes. |
+| transforms.mask.fields | Fields to mask. | string | None | CSV | Masks PII. | Yes. |
+| transforms.replace.exclude | Fields to exclude/rename. | string | None | CSV | Removes fields. | Yes. |
+| (All other SMTs like flatten, filter, etc.) | Similar pattern; see Kafka Connect docs for full SMT list. | Varies | Varies | Varies | Behavior per SMT; Debezium supports all standard + custom. | Yes, as long as class in plugin. |
+
+## 11. Dead Letter Queue (DLQ)
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| errors.tolerance | Tolerate processing errors. | string | none | none, all | all: Sends to DLQ; none: Fails. | Yes. |
+| errors.deadletterqueue.topic.name | DLQ topic name. | string | None | Topic name | Must exist. Wrong: No DLQ. | Yes. |
+| errors.deadletterqueue.context.headers.enable | Add context headers to DLQ. | boolean | false | true/false | true: Adds error details. | Yes. |
+| errors.deadletterqueue.topic.replication.factor | Replication for DLQ. | short | 3 | 1+ | If auto-create. | Yes. |
+| errors.retry.timeout | Retry timeout (sec). | int | 0 | 0+ | Positive: Retries errors. | Yes. |
+| errors.retry.delay.max.ms | Max delay between retries. | long | 0 | 0+ | Exponential backoff. | Yes. |
+| errors.log.enable | Log error details. | boolean | false | true/false | true: Logs full errors. | Yes. |
+| errors.log.include.messages | Include message in logs. | boolean | false | true/false | true: Logs payload (PII risk). | Yes. |
+
+## 12. Producer / Performance Tuning
+
+These are pass-through to Kafka producer (prefix `producer.` or `internal.producer.` for history).
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| max.batch.size | Max events per batch to Kafka. | int | 2048 | Positive | Higher: Better throughput, more mem. | Yes. |
+| max.queue.size | Internal queue size. | int | 8192 | Positive | Higher: Handles bursts better. | Yes. |
+| poll.interval.ms | Binlog poll frequency. | long | 500 | Positive | Lower: Lower latency, higher CPU. | Yes. |
+| min.row.count.to.stream.results | Threshold for streaming results. | int | 1000 | 0+ | Higher: Batches more for efficiency. | Yes. |
+| producer.acks | Producer acks level. | string | 1 | 0,1,all | all: Durable but slow; 0: Fire-forget. | Yes, pass-through. |
+| producer.linger.ms | Linger time for batches. | long | 0 | 0+ | Positive: Improves compression/throughput. | Yes. |
+| producer.batch.size | Producer batch size (bytes). | int | 16384 | Positive | Higher: Better efficiency. | Yes. |
+| producer.compression.type | Compression. | string | none | none,gzip,snappy,lz4,zstd | Enables compression; reduces bandwidth. | Yes. |
+| producer.request.timeout.ms | Request timeout. | int | 30000 | Positive | High: Tolerates slow brokers. | Yes. |
+| (All other producer.*) | See Kafka docs for full list (~50 params). | Varies | Kafka defaults | Varies | Tunes producer perf/reliability. Invalid ignored or error. | Yes, all pass-through supported. |
+
+## 13. Consumer Configs (for Internal Use)
+
+Prefix `consumer.` for offset/history consumers.
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| consumer.fetch.min.bytes | Min bytes to fetch. | int | 1 | Positive | Higher: Fewer requests. | Yes. |
+| consumer.fetch.max.wait.ms | Max wait for fetch. | int | 500 | Positive | Balances latency/throughput. | Yes. |
+| consumer.max.partition.fetch.bytes | Max per partition. | int | 1048576 | Positive | Higher: More data per fetch. | Yes. |
+| consumer.session.timeout.ms | Session timeout. | int | 45000 | Positive | Affects rebalance time. | Yes. |
+| consumer.request.timeout.ms | Request timeout. | int | 30000 | Positive | High: Tolerates delays. | Yes. |
+| (All other consumer.*) | See Kafka docs. | Varies | Defaults | Varies | Tunes internal consumers. | Yes. |
+
+## 14. Converter Configs
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| key.converter | Key converter class. | string | org.apache.kafka.connect.json.JsonConverter | Class name | e.g., JsonConverter, AvroConverter. Changes serialization. | Yes. |
+| value.converter | Value converter class. | string | Same as key | Class name | Same. | Yes. |
+| key.converter.schemas.enable | Embed schemas in key. | boolean | true | true/false | false: Schemaless; saves space but risks incompatibility. | Yes. |
+| value.converter.schemas.enable | Embed schemas in value. | boolean | true | true/false | Same. | Yes. |
+| value.converter.schema.registry.url | URL for Schema Registry (Avro). | string | None | URL | Required for Avro; wrong URL fails. | Yes, use Glue Schema Registry in AWS. |
+| value.converter.enhanced.avro.schema.support | Enhanced Avro features. | boolean | false | true/false | true: Better enum/logical types. | Yes. |
+| value.converter.connect.meta.data | Include metadata. | boolean | true | true/false | false: Slimmer messages. | Yes. |
+| (Other converters like Protobuf) | Similar; see Confluent docs. | Varies | Varies | Varies | Changes format; must match sinks. | Yes, if classes in plugin. |
+
+## 15. Logging & Worker Configs (Partial Support)
+
+These are worker-level, set in custom worker properties file uploaded to S3 for MSK Connect.
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| rest.port | REST API port. | int | 8083 | 1-65535 | Changes API port; conflicts in cluster. | Partial; MSK manages, override may not work. |
+| rest.host.name | Host for REST. | string | None | Hostname | For advertising. | Partial. |
+| plugin.path | Path to plugins. | string | None | CSV paths | MSK auto-sets from uploaded plugin. | No, managed by AWS. |
+| offset.flush.timeout.ms | Flush timeout. | long | 5000 | Positive | See offsets. | Yes, in custom worker. |
+| config.storage.topic | Topic for connector configs. | string | None | Topic | For distributed mode. | Yes. |
+| config.storage.replication.factor | Replication. | short | 3 | 1+ |  | Yes. |
+| status.storage.topic | Topic for status. | string | None | Topic |  | Yes. |
+| worker.tasks.shutdown.timeout.ms | Shutdown timeout. | long | 10000 | Positive | Longer: Graceful shutdown. | Yes. |
+| access.control.allow.methods | CORS methods. | string | GET,POST,PUT,DELETE,OPTIONS | CSV | Security for REST. | Partial. |
+| access.control.allow.origin | CORS origins. | string | * | CSV |  | Partial. |
+| (Other worker params ~100) | See Kafka Connect docs. | Varies | Defaults | Varies | Tunes cluster; many AWS-managed. | Partial; test for conflicts. |
+
+## 16. MSK Connect-Specific Internal Parameters (Not User-Configurable)
+
+These are set via MSK Connect console/API, not in JSON.
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| aws.worker.instance.type | Instance type for workers. | string | m5.large | AWS types | Changes capacity. | Yes, via capacity settings. |
+| aws.worker.instance.count | Number of workers. | int | 1 | 1+ | Scales Connect. | Yes. |
+| aws.worker.logging.level | Log level. | string | INFO | TRACE,DEBUG,INFO,WARN,ERROR | More verbose logs. | Yes, via log delivery. |
+| aws.maximum.task.retries | Task retry count. | int | 3 | 0+ | On failures. | Internal. |
+| aws.custom.plugin.startup.timeout.ms | Plugin startup timeout. | long | 60000 | Positive |  | Internal. |
+| aws.use.private.boundary | Private networking. | boolean | false | true/false | For VPC. | Yes, via networking settings. |
+| aws.worker.debug.enable | Debug mode. | boolean | false | true/false | Extra logs. | Partial, via CloudWatch. |
+
+## Summary
+- **Total Parameters**: ~300+ including pass-through (Debezium ~80, Kafka ~100 producer/consumer, Connect ~100 worker).
+- **Recommendations**: Start with minimal config, add as needed. Use Debezium docs for updates. For MSK, always test in dev; monitor CloudWatch for errors.
+    
+</details>
+
+> **Notes:**
+>
+> * Replace RDS hostname, database, user/password, and tables with your actual values.
+> * The JSON can also include **additional filtering, masking, or SMT transforms** if needed.
+
+4. **Create the Connector**
+
+   * Click **Create** in MSK Connect.
+   * MSK Connect will deploy a **Debezium MySQL connector as a source**, and start reading CDC from RDS.
+
+---
 
