@@ -4775,10 +4775,6 @@ aws s3 cp debezium-connector-mysql-3.3.1.zip s3://my-bucket/path/
 
 ---
 
-Perfect — your RDS and Debezium plugin setup is ready. The next steps are all about **connecting Debezium to MSK Connect, creating the connector, and sending CDC events to MSK (Kafka topics)**. I’ll break it down carefully so you can do it in AWS safely.
-
----
-
 ## 3. Create MSK Connect Connector for Debezium MySQL
 
 1. **Go to the MSK Connect Console**
