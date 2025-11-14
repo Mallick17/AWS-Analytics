@@ -4799,6 +4799,11 @@ Perfect — your RDS and Debezium plugin setup is ready. The next steps are all 
    * Here is where all the configuration we discussed comes in.
    * Create a JSON file (or paste into the console) containing **all the Debezium MySQL parameters**, plus Kafka Connect offsets, transforms, DLQ, etc.
 
+> **Debezium + MSK Connect: Config**
+> **Only configure via a single JSON file** — **never edit JARs** (`debezium-core.jar`, `mysql-connector.jar`, etc.).  
+> All settings (DB, tables, snapshot, transforms, DLQ, etc.) go in one JSON passed to MSK Connect.  
+> JARs are auto-mounted by AWS — editing them breaks the connector.
+
 ### Example JSON for your RDS → MSK pipeline
 
 ```json
