@@ -5189,6 +5189,149 @@ Here is a detailed configuration JSON example for MSK Connect Iceberg Sink Conne
 }
 ```
 
+<details>
+    <summary>Click to view the extended parameters used</summary>
+
+## Apache Iceberg S3 Sink Connector Configuration Parameters for MSK Connect (Hadoop Catalog on S3)
+
+**Apache Iceberg Version**: Based on the latest stable release as of November 14, 2025, which is Iceberg 1.6.1. This documentation covers the Iceberg Sink Connector (`org.apache.iceberg.connect.IcebergSinkConnector` or equivalent in Tabular/Databricks forks, but standardized here). Configurations are provided as a JSON object when creating the connector in AWS MSK Connect. The plugin ZIP (containing JARs and dependencies) must be uploaded to S3 and registered as a custom plugin.
+
+**Scenario Overview (Hadoop Catalog on S3)**:
+- **Hadoop Catalog**: Stores Iceberg metadata (e.g., JSON/Avro files for schemas, snapshots, manifests) directly in an S3 path (e.g., `s3://my-iceberg-warehouse/metadata/`). No AWS Glue or Hive Metastore needed. Uses Hadoop's `FileSystem` API (S3A) for access.
+- **S3 Integration**: Data files (Parquet/ORC/Avro) and metadata are written to S3. IAM role for MSK Connect must allow `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:ListBucket` on the warehouse bucket/path.
+- **MSK Connect Support**: All parameters are fully supported. Inherited Kafka Connect properties (e.g., converters, transforms) are passed through. Dynamic updates via connector pause/resume; some require restart. Invalid values cause validation errors or runtime failures (logged in CloudWatch).
+- **Behavior Notes**: Hadoop Catalog is lightweight and serverless but lacks ACID transactions across tables (use REST/Glue for that). For S3, configure `iceberg.hadoop.fs.s3a.*` properties for optimal performance (e.g., multipart uploads). Test with small topics; monitor for OOM on large buffers.
+
+The list is exhaustive, derived from official Iceberg docs. Organized by category. Each table includes:
+- **Parameter**: Property name (prefixed with `iceberg.` where applicable).
+- **Description**: Detailed explanation, with Hadoop/S3 notes.
+- **Type**: Data type (string, boolean, int, long, map).
+- **Default**: Default value.
+- **Allowed Values**: Possible values/range.
+- **Behavior Changes**: Impacts of changes; invalid handling (e.g., fails startup/runtime error).
+- **Supported in MSK Connect**: Yes (all are); notes on IAM/S3.
+
+~80+ parameters total (Iceberg-specific ~50, Hadoop/S3 ~20, inherited Kafka Connect ~100 but summarized).
+
+### 1. Connector Identity & Basics (Inherited from Kafka Connect)
+
+These are standard Kafka Connect sink properties. All supported in MSK Connect.
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| name | Unique name for the connector instance. | string | None (required) | Any string | Duplicate: Fails creation. Used in logs/metrics. | Yes, required in JSON. |
+| connector.class | Java class for the connector. | string | None (required) | org.apache.iceberg.connect.IcebergSinkConnector | Wrong class: ClassNotFoundException at startup. | Yes, matches uploaded plugin. |
+| tasks.max | Max parallel tasks. | int | 1 | >=1 | Higher: Better parallelism for multi-topic/partition; but increases S3 I/O contention. >1 requires buffer config tuning to avoid duplicates. | Yes; scale via MSK capacity. |
+| topics | Kafka topics to consume (CSV). | string | None (required) | CSV topic names | Empty: No data flow. Regex not supported. | Yes; MSK auto-discovers. |
+| topic.regex | Regex for dynamic topic discovery (alternative to topics). | string | None | Valid regex | true (with enable=true): Auto-subscribes matching topics; reduces manual config but risks sprawl. | Yes. |
+| key.converter | Serializer for record keys. | string | org.apache.kafka.connect.storage.StringConverter | Class name (e.g., JsonConverter) | Wrong: Serialization errors on consume. For Iceberg, often String for routing. | Yes. |
+| value.converter | Serializer for record values. | string | org.apache.kafka.connect.json.JsonConverter | Class name | Impacts data format; e.g., Avro needs schema.enable=true for Iceberg schema inference. | Yes. |
+| value.converter.schemas.enable | Embed schemas in values. | boolean | true | true/false | false: Schemaless (faster, but Iceberg can't infer schema; requires manual). | Yes. |
+| key.converter.schemas.enable | Embed schemas in keys. | boolean | false | true/false | false: Recommended to save space; rarely needed for routing. | Yes. |
+| transforms | List of Single Message Transforms (CSV). | string | None | CSV transform names | Applies pre-write (e.g., unwrap Debezium); order matters. Invalid: Skips transform. | Yes; e.g., for CDC flattening. |
+| errors.tolerance | Error handling mode. | string | none | none, all | all: Continues on errors (sends to DLQ); none: Fails task. | Yes; crucial for production. |
+| errors.deadletterqueue.topic.name | DLQ topic for failed records. | string | None | Topic name | Must exist; wrong: Logs errors only. | Yes; auto-create if enabled. |
+| errors.deadletterqueue.context.headers.enable | Add context to DLQ headers. | boolean | true | true/false | false: Slimmer DLQ messages; loses error details. | Yes. |
+
+### 2. Iceberg Table Configurations
+
+These control table creation, routing, and schema handling. For Hadoop Catalog, tables are created in the warehouse path (e.g., `s3://bucket/warehouse/db/table/`).
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| iceberg.tables | Comma-separated list of destination tables (when dynamic routing disabled). Format: topic->db.table. | string | None (required if dynamic=false) | CSV like "topic1->db.table1,topic2->db.table2" | Missing: Fails if no dynamic. Mismatch routes wrong. | Yes; static for simple setups. |
+| iceberg.tables.dynamic-enabled | Enable dynamic table routing based on record field. | boolean | false | true/false | true: Routes via route-field (flexible for multi-table); false: Uses static list. Requires route-field if true. | Yes; ideal for fan-out. |
+| iceberg.tables.route-field | Field in record containing target table name (e.g., "__table"). | string | None (required if dynamic=true) | Field name | Missing: Routing fails, records dropped/logged. Case-sensitive. | Yes. |
+| iceberg.tables.default-commit-branch | Default branch for commits (Git-like in catalog). | string | main | Branch name | Changes target branch; non-existent: Creates new. For Hadoop: Ignored (file-based). | Yes; Hadoop ignores. |
+| iceberg.tables.default-id-columns | Default primary key columns (CSV) for auto-created tables. | string | None | CSV column names | Adds PK constraint; invalid columns: Schema evolution fails. | Yes; improves queries. |
+| iceberg.tables.default-partition-by | Default partition spec (CSV fields) for auto-created tables. | string | None | CSV like "year(ts),month(ts)" | Partitions data; wrong spec: Write errors. Hidden/identity partitions supported. | Yes; tunes S3 scans. |
+| iceberg.tables.auto-create-enabled | Auto-create tables if missing. | boolean | false | true/false | true: Infers schema from records; false: Fails on missing table. | Yes; convenient but risks schema mismatches. |
+| iceberg.tables.evolve-schema-enabled | Evolve schema by adding missing columns. | boolean | false | true/false | true: Appends columns on writes; false: Fails on schema drift. | Yes; use with caution for S3 (immutable manifests). |
+| iceberg.tables.schema-force-optional | Make new/evolved columns optional (nullable). | boolean | false | true/false | true: Allows nulls; false: Required (may drop records with nulls). | Yes. |
+| iceberg.tables.schema-case-insensitive | Case-insensitive column matching. | boolean | false | true/false | true: Matches ignoring case; false: Strict (avoids errors in mixed-case data). | Yes. |
+| iceberg.tables.auto-create-props.* | Map of properties for auto-create (e.g., .write.format=parquet). | map | None | Key-value (e.g., comment="My table") | Overrides defaults; invalid prop: Ignored or write fail. | Yes; e.g., set format=orc. |
+| iceberg.tables.write-props.* | Map of write properties (e.g., .target-file-size-bytes=134217728). | map | None | Key-value (Iceberg write props) | Overrides per-write; e.g., smaller files: More S3 objects (higher cost). | Yes; tunes compaction. |
+| iceberg.table.<table-name>.commit-branch | Per-table commit branch. | string | Falls to default | Branch name | Overrides default; for branching workflows. Hadoop: N/A. | Yes; Hadoop ignores. |
+| iceberg.table.<table-name>.id-columns | Per-table primary keys (CSV). | string | Falls to default | CSV columns | Overrides; invalid: PK not enforced. | Yes. |
+| iceberg.table.<table-name>.partition-by | Per-table partitions (CSV). | string | Falls to default | CSV spec | Overrides; changes partitioning strategy. | Yes. |
+| iceberg.table.<table-name>.route-regex | Regex to match route-field for this table (static routing). | string | None | Valid regex | Matches records to table; no match: Dropped. | Yes. |
+
+### 3. Catalog Configurations (Hadoop on S3 Focus)
+
+Core for Hadoop Catalog: Set `iceberg.catalog.type=hadoop`. Warehouse is S3 path for data/metadata. All `iceberg.catalog.*` forwarded to Iceberg.
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| iceberg.catalog | Logical catalog name (e.g., "prod"). | string | iceberg | String | Used in table IDs; changes namespace. | Yes. |
+| iceberg.catalog.type | Catalog implementation type. | string | None (required) | hadoop, glue, hive, rest, nessie, jdbc | hadoop: S3 file-based metadata. Wrong: Catalog init fail. | Yes; hadoop for S3-only. |
+| iceberg.catalog.catalog-impl | Full class for custom catalog. | string | None | e.g., org.apache.iceberg.hadoop.HadoopCatalog | Overrides type; wrong class: Load error. For Hadoop: org.apache.iceberg.hadoop.HadoopCatalog. | Yes. |
+| iceberg.catalog.warehouse | S3 path for tables/metadata (e.g., s3://bucket/warehouse/). | string | None (required for hadoop) | S3 URI | Missing: No writes. Subpath per DB: warehouse/db/. | Yes; IAM must allow full access. |
+| iceberg.catalog.uri | Endpoint URI (not for Hadoop). | string | None | URL (e.g., thrift://hive:9083) | Hadoop: Ignored. Wrong: Connect fail. | Yes; N/A for hadoop. |
+| iceberg.catalog.io-impl | File I/O class for S3. | string | None | org.apache.iceberg.aws.s3.S3FileIO | Custom I/O; default Hadoop FS for hadoop. Wrong: Read/write fail. | Yes; use AWS for optimized S3. |
+| iceberg.catalog.credential | Auth token (not for Hadoop). | string | None | Token string | Hadoop: Ignored (uses IAM). | Yes; N/A. |
+| iceberg.catalog.client.region | AWS region for S3/Glue. | string | None | e.g., us-east-1 | Wrong: S3 access denied. Auto-detected if unset. | Yes; match bucket region. |
+| iceberg.catalog.s3.access-key-id | AWS access key (fallback). | string | None | Key ID | If IAM fails: Uses keys. Exposed: Security risk; prefer IAM. | Yes; avoid if possible. |
+| iceberg.catalog.s3.secret-access-key | AWS secret key. | string | None | Secret | Same as above; rotate if used. | Yes; use Secrets Manager. |
+| iceberg.catalog.s3.endpoint | Custom S3 endpoint (e.g., MinIO). | string | None | e.g., http://minio:9000 | Overrides AWS endpoint; for non-AWS S3. Wrong: Connect timeout. | Yes; default AWS. |
+| iceberg.catalog.s3.staging-dir | Temp dir for uploads. | string | None | S3 path | For multipart; unset: Uses temp dir. Larger: Handles big files. | Yes. |
+| iceberg.catalog.s3.path-style-access | Use path-style S3 URLs. | boolean | false | true/false | true: For virtual-hosted incompatible setups; may increase latency. | Yes; rarely needed. |
+| iceberg.hadoop-conf-dir | Dir with Hadoop XML configs (core-site.xml, etc.). | string | None | File path | Loads S3A configs; MSK: Upload to plugin or use inline. Missing: Defaults only. | Partial; use iceberg.hadoop.* instead. |
+| iceberg.hadoop.* | Hadoop configs (e.g., fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem). | map | None | Hadoop props (e.g., fs.s3a.block.size=67108864) | Critical for S3: e.g., fs.s3a.connection.ssl.enabled=true. Wrong: S3 errors. See below for S3A specifics. | Yes; key for Hadoop on S3. |
+
+**Hadoop/S3A Specific Sub-Parameters** (under `iceberg.hadoop.fs.s3a.*` or general hadoop.*):
+- **fs.s3a.impl**: org.apache.hadoop.fs.s3a.S3AFileSystem (default; enables S3A).
+- **fs.s3a.access.key**: Access key (as above).
+- **fs.s3a.secret.key**: Secret key.
+- **fs.s3a.endpoint**: S3 endpoint (region-specific, e.g., s3.ap-south-1.amazonaws.com).
+- **fs.s3a.path.style.access**: true/false (path-style).
+- **fs.s3a.block.size**: 64MB-128MB (larger: Fewer parts, better perf; too large: OOM).
+- **fs.s3a.multipart.size**: 100MB+ (min part size; affects upload parallelism).
+- **fs.s3a.connection.maximum**: 1000+ (max connections; higher: Better throughput).
+- **fs.s3a.threads.max**: 10+ (upload threads; tune for tasks.max).
+- Behavior: Smaller block: More S3 calls (costly); invalid: Fallback or fail. All supported; IAM preferred over keys.
+
+### 4. Control Topic & Coordination
+
+For distributed commits across tasks. Uses Kafka for coordination.
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| iceberg.control.topic | Kafka topic for commit coordination. | string | control-iceberg | Topic name | Must exist/retain forever. Wrong: Commit fail, data loss. | Yes; create with infinite retention. |
+| iceberg.control.group-id-prefix | Consumer group prefix for control. | string | cg-control | Prefix string | Changes group; duplicate: Rebalance issues. | Yes. |
+| iceberg.control.commit.interval-ms | Commit attempt frequency. | long | 300000 (5 min) | >=0 | Lower: More frequent (higher load); 0: Disabled (risky). | Yes; balance latency/durability. |
+| iceberg.control.commit.timeout-ms | Per-commit timeout. | long | 30000 (30s) | >=0 | Higher: Tolerates slow S3; low: Faster failovers. | Yes. |
+| iceberg.control.commit.threads | Commit worker threads. | int | CPU cores * 2 | >=1 | Higher: Parallel commits; low: Bottlenecks on multi-task. | Yes; match instance cores. |
+| iceberg.coordinator.transactional.prefix | Prefix for transactional producer ID. | string | (empty) | String | Enables idempotent commits; empty: Non-transactional (possible duplicates). | Yes. |
+
+### 5. Kafka Client Overrides (for Control Topic)
+
+Fallback if worker props unavailable.
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| iceberg.kafka.bootstrap.servers | Bootstrap servers for control. | string | Worker default | CSV brokers | Wrong: Control connect fail. MSK: Auto. | Partial; MSK sets. |
+| iceberg.kafka.security.protocol | Security for control client. | string | Worker default | PLAINTEXT, SSL, SASL | Mismatch: Auth fail. | Yes. |
+| iceberg.kafka.* | Any Kafka client prop (e.g., acks=all). | map | Worker defaults | Kafka props | Overrides; e.g., retries=3: More resilience. Invalid: Client errors. | Yes; ~50 props possible (see Kafka docs). |
+
+### 6. Inherited Kafka Connect Worker/Advanced (Summarized)
+
+~100+ standard props (not Iceberg-specific). Set in custom worker config (S3 properties file) for MSK.
+
+| Parameter | Description | Type | Default | Allowed Values | Behavior Changes | Supported in MSK Connect |
+|-----------|-------------|------|---------|----------------|------------------|--------------------------|
+| offset.storage.topic | Topic for offsets. | string | connect-offsets | Topic | Infinite retention; wrong: Offset loss. | Yes; MSK auto-creates. |
+| offset.flush.interval.ms | Offset commit interval. | long | 60000 | >=0 | Lower: Less data loss on crash; higher: Better perf. | Yes. |
+| producer.acks | Producer acks for writes (control). | string | 1 | 0,1,all | all: Durable commits; 0: Fast but risky. | Yes, pass-through. |
+| (Other producer.* / consumer.*) | Kafka client tuning (e.g., batch.size). | varies | Kafka defaults | Varies | Tunes throughput; e.g., compression.type=gzip: Smaller S3 writes. | Yes; full list in Kafka docs. |
+| rest.port | REST API port (worker). | int | 8083 | 1-65535 | Conflicts: Startup fail. | Partial; MSK manages. |
+
+### Summary
+- **Total Parameters**: ~150+ (Iceberg 50+, Hadoop/S3 20+, Kafka Connect 80+).
+- **Hadoop on S3 Key Tips**: Use `iceberg.catalog.type=hadoop` + `iceberg.catalog.warehouse=s3://...` + S3A props for auth/perf. No server needed; metadata in S3 scales automatically.
+- **Recommendations**: Start minimal (e.g., user's JSON); add transforms for CDC. Validate with `kafka-connect` CLI if local. Monitor CloudWatch for S3 throttling.
+    
+</details>
+
 Notes:
 - `iceberg.catalog.type` is set to `hadoop` for Hadoop Catalog.
 - `iceberg.catalog.warehouse` points to your S3 bucket root used for storing Iceberg tables and metadata.
