@@ -5239,3 +5239,118 @@ This approach completely avoids AWS Glue(Charged), uses Hadoop Catalog(Open Sour
 
 
 ---
+
+## Setup of Debezium Connector and S3 Table Sink Connector in a Single MSK Connect
+To set up a Kafka Connect worker in MSK Connect that runs both Debezium (Producer/Source connector) for RDS CDC binlog and an Iceberg S3 Sink connector (Consumer) for sinking data to Iceberg tables on S3, follow this step-by-step guide:
+
+<details>
+    <summary>Click to view setup steps in detailed</summary>
+
+### Step 1: Prepare Your MSK Connect Setup
+
+- Ensure you have an MSK cluster and MSK Connect configured with appropriate networking and IAM roles.
+- Make sure your VPC, subnets, and security groups allow connectivity to RDS, MSK, S3, and other required services.
+
+### Step 2: Download and Install Connector Plugins
+
+- Obtain the Debezium connector plugin for RDS CDC binlog (usually Debezium MySQL connector).
+- Obtain the Iceberg S3 Sink Connector plugin JAR or install from Confluent Hub.
+- Upload these plugins to a location accessible by MSK Connect (e.g., S3).
+
+### Step 3: Create a Custom Plugin in MSK Connect
+
+- In the AWS Console, under MSK Connect, create a **custom plugin** for each connector:
+  - **Plugin 1:** Debezium RDS CDC connector plugin.
+  - **Plugin 2:** Iceberg S3 Sink connector plugin.
+  
+- Provide the S3 URI of the uploaded plugin bundle and verify the plugin status.
+
+### Step 4: Create an MSK Connect Worker Configuration
+
+- Create a worker configuration in MSK Connect that:
+  - Specifies the Kafka cluster.
+  - References both custom plugins you created (Debezium and Iceberg).
+  - Sets necessary worker-level configuration (e.g., JVM options, log settings).
+
+### Step 5: Launch an MSK Connect Connector Worker
+
+- When creating a Kafka Connect **connector** (an instance of a connector), assign it to the worker configuration created in Step 4.
+- In MSK Connect, the worker configuration can include multiple plugins at once, enabling you to run both connectors on the same cluster of workers.
+
+### Step 6: Configure Debezium Source Connector
+
+- Prepare a JSON config file for the Debezium connector, e.g.:
+
+```json
+{
+  "name": "debezium-rds-connector",
+  "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+  "database.hostname": "rds-endpoint",
+  "database.port": "3306",
+  "database.user": "youruser",
+  "database.password": "yourpassword",
+  "database.server.id": "184054",
+  "database.server.name": "rds-server",
+  "database.include.list": "yourdb",
+  "table.include.list": "yourdb.yourtable",
+  "database.history.kafka.bootstrap.servers": "your-msk-bootstrap-servers",
+  "database.history.kafka.topic": "dbhistory.fullfillment",
+  "include.schema.changes": "false",
+  "decimal.handling.mode": "precise"
+}
+```
+
+- Deploy via MSK Connect console or REST API.
+
+### Step 7: Configure Iceberg S3 Sink Connector
+
+- Prepare a JSON config for the Iceberg sink, without Glue catalog if preferred, using HadoopCatalog for example:
+
+```json
+{
+  "name": "iceberg-s3-sink-connector",
+  "connector.class": "io.tabular.iceberg.connect.IcebergSinkConnector",
+  "topics": "your-kafka-topic-from-debezium",
+  "iceberg.catalog.catalog-impl": "org.apache.iceberg.hadoop.HadoopCatalog",
+  "iceberg.catalog.warehouse": "s3a://your-bucket/warehouse-path",
+  "iceberg.catalog.io-impl": "org.apache.iceberg.aws.s3.S3FileIO",
+  "iceberg.hadoop.fs.s3a.access.key": "your-access-key",
+  "iceberg.hadoop.fs.s3a.secret.key": "your-secret-key",
+  "iceberg.hadoop.fs.s3a.endpoint": "s3.your-region.amazonaws.com",
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "false",
+  "tasks.max": "1"
+}
+```
+
+- Deploy this in MSK Connect also attached to the same worker configuration.
+
+### Step 8: Validate and Monitor
+
+- Confirm both connectors are running in MSK Connect.
+- Monitor connector and worker logs for errors.
+- Validate that Debezium is capturing CDC from RDS and publishing to Kafka topics.
+- Validate the Iceberg sink connector is consuming Kafka topics and writing correctly to Iceberg tables in S3.
+
+### Summary
+
+| Step | Description                              |
+|-------|----------------------------------------|
+| 1     | Prepare MSK, VPC, IAM for connectivity |
+| 2     | Obtain Debezium and Iceberg sink plugins |
+| 3     | Create custom plugins in MSK Connect    |
+| 4     | Create MSK Connect worker config with both plugins |
+| 5     | Start MSK Connect worker using that config |
+| 6     | Deploy Debezium RDS CDC source connector |
+| 7     | Deploy Iceberg S3 sink connector        |
+| 8     | Validate CDC flow and sink to S3 Iceberg|
+
+This approach allows you to run the producer (Debezium) and consumer (Iceberg sink) plugins on the same MSK Connect worker cluster, ensuring smooth CDC ingestion and sink to S3 tables.
+
+</details>
+
+---
+
+
+
