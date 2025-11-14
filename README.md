@@ -5112,3 +5112,130 @@ These are set via MSK Connect console/API, not in JSON.
 
 ---
 
+## 4. Create MSK Cluster
+
+
+---
+
+## 5. Create MSK Connect Connector for Apache Iceberg S3 Table
+To configure the Apache Iceberg S3 Sink Connector on AWS MSK using Hadoop Catalog (storing metadata in S3) instead of AWS Glue for storing metadata.
+
+
+<details>
+    <summary>Click to view Detailed step-by-step guide covering plugin preparation, S3 storage, and connector configuration in MSK Connect</summary>
+
+### Step 1: Download and Prepare the Apache Iceberg Sink Connector Plugin
+
+- Download the Iceberg Kafka Connect Sink Connector ZIP/JAR from Apache Iceberg GitHub or Databricks Iceberg Kafka Connect repositories.
+- The ZIP you download typically contains the entire plugin directory with JAR files and dependencies.
+- The folder to package is usually the root folder that contains all the JARs and libraries needed (not nested subfolders). For example, if you unzip the release and get a folder `iceberg-kafka-connect`, zip the entire contents of this directory preserving the internal structure.
+- Example packaging:
+  - Unzip the release
+  - Zip the root directory such as `iceberg-kafka-connect/` itself, ensuring all jars/plugins are inside the zip at the root level without extra parent folders when unzipped by Connect workers.
+
+### Step 2: Upload the Connector Plugin ZIP to Amazon S3
+
+- Upload the prepared plugin ZIP to an S3 bucket dedicated for MSK Connect plugins.
+- For example:
+  ```
+  aws s3 cp iceberg-kafka-connect.zip s3://my-msk-connect-plugins/
+  ```
+- Make sure the S3 bucket and object have correct read permissions for MSK Connect IAM roles.
+
+### Step 3: Install and Register the Connector Plugin in AWS MSK Connect
+
+- Open AWS MSK Connect Console.
+- Go to "Custom plugins" and click "Create plugin".
+- Fill in plugin details and select S3 as source.
+- Provide the S3 URI to the plugin ZIP (`s3://my-msk-connect-plugins/iceberg-kafka-connect.zip`).
+- AWS MSK Connect will unwrap and install this plugin for use in connectors.
+
+### Step 4: Prepare Hadoop Catalog for Iceberg Metadata Storage on S3
+
+- Hadoop Catalog stores table metadata as files in a directory in S3.
+- Choose an S3 path to act as your Iceberg warehouse and metadata store; e.g., `s3://my-iceberg-warehouse/metadata/`.
+- You don't need AWS Glue or Hive Metastore; Hadoop Catalog uses this S3 location to hold metadata in JSON/Avro format.
+- Make sure your MSK Connect IAM role has permission to read/write S3 at this path.
+- No additional catalog service setup is needed beyond correct S3 bucket and path.
+
+### Step 5: Connector Configuration JSON with Hadoop Catalog
+
+Here is a detailed configuration JSON example for MSK Connect Iceberg Sink Connector using Hadoop Catalog on S3:
+
+```json
+{
+  "name": "iceberg-s3-sink-connector",
+  "connector.class": "io.tabular.iceberg.connect.IcebergSinkConnector",
+  "tasks.max": "1",
+  "topics": "your-kafka-topic",
+
+  "iceberg.catalog.type": "hadoop",
+
+  "iceberg.catalog.warehouse": "s3://my-iceberg-warehouse/",
+  
+  "iceberg.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+  "iceberg.hadoop.fs.s3a.access.key": "<AWS_ACCESS_KEY_ID>",                  // Optional if role-based auth used
+  "iceberg.hadoop.fs.s3a.secret.key": "<AWS_SECRET_ACCESS_KEY>",           // Optional if role-based auth used
+  "iceberg.hadoop.fs.s3a.endpoint": "s3.ap-south-1.amazonaws.com",         // Region endpoint
+
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "true",
+  "key.converter.schemas.enable": "false",
+
+  "errors.tolerance": "all",
+  "errors.deadletterqueue.topic.name": "dlq-topic",
+  "errors.deadletterqueue.context.headers.enable": "true"
+}
+```
+
+Notes:
+- `iceberg.catalog.type` is set to `hadoop` for Hadoop Catalog.
+- `iceberg.catalog.warehouse` points to your S3 bucket root used for storing Iceberg tables and metadata.
+- The Hadoop FS `s3a` configuration indicates that Iceberg uses the Hadoop S3A client to access S3.
+- AWS credentials in config are optional if MSK Connect’s IAM role has S3 permissions.
+- Replace `<AWS_ACCESS_KEY_ID>` and `<AWS_SECRET_ACCESS_KEY>` with actual keys only if not using IAM roles.
+
+### Step 6: Set Up IAM Role Permissions for MSK Connect
+
+- The IAM role assigned to MSK Connect workers must have policies allowing:
+  - Read/write/list objects in `s3://my-iceberg-warehouse/`.
+  - Network access to MSK (for Kafka).
+  - If using S3 access keys in config, ensure role permissions align or keys are correct.
+- Example minimal S3 policy snippet:
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "s3:PutObject",
+    "s3:GetObject",
+    "s3:ListBucket"
+  ],
+  "Resource": [
+    "arn:aws:s3:::my-iceberg-warehouse",
+    "arn:aws:s3:::my-iceberg-warehouse/*"
+  ]
+}
+```
+
+### Step 7: Deploy the Connector on MSK Connect
+
+- In the AWS MSK Connect console, choose "Create connector".
+- Select the custom plugin (Iceberg Sink) you uploaded from S3.
+- Configure using the JSON above.
+- Assign the IAM role with correct permissions.
+- Provide necessary Kafka topic subscriptions.
+- Deploy and start the connector.
+
+### Step 8: Validate Setup and Monitor
+
+- Confirm connector is running with no errors in logs.
+- Confirm Iceberg metadata and data files start appearing in the S3 warehouse directory.
+- Use Iceberg tools or Athena configured with Iceberg format to query your tables.
+
+This approach completely avoids AWS Glue(Charged), uses Hadoop Catalog(Open Source) with S3 for metadata, and ensures the connector plugin is properly prepared, stored, and configured in AWS MSK Connect without missing any critical points.
+
+</details>
+
+
+---
