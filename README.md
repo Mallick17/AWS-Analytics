@@ -5112,7 +5112,7 @@ These are set via MSK Connect console/API, not in JSON.
 
 ---
 
-## 4. Create MSK Cluster **← **CONSOLE STEPS**
+## 4. Create MSK Cluster **CONSOLE STEPS**
 
 ### Step-by-step in AWS Console (November 2025)
 
@@ -5470,7 +5470,7 @@ This approach completely avoids AWS Glue(Charged), uses Hadoop Catalog(Open Sour
 
 ---
 
-## 6. Single MSK Connect Cluster Running Both Debezium & Iceberg Sink Connectors **← NEW SECTION – THIS IS WHAT YOU ASKED FOR**
+## 6. Single MSK Connect Cluster Running Both Debezium & Iceberg Sink Connectors
 
 ### Step-by-step AWS Console (November 2025)
 
