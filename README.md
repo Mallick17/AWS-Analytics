@@ -5594,9 +5594,7 @@ Both connectors now run on the **same MSK Connect worker cluster** → single bi
 | Change worker heap size after creation | No → need new connector | Must recreate connector with new worker.properties in S3 |
 | Rotate Secrets Manager secret | Yes | Update secret value → connector auto-picks up within ~5 min |
 
-You are now 100% complete.
-
-Your entire pipeline is production-grade, uses only **one MSK Connect** cluster, **zero Glue cost**, and will run reliably at scale.
+> Entire pipeline is production-grade, uses only **one MSK Connect** cluster, **zero Glue cost**, and will run reliably at scale.
 
 ---
 
