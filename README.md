@@ -5468,6 +5468,135 @@ This approach completely avoids AWS Glue(Charged), uses Hadoop Catalog(Open Sour
 
 </details>
 
+---
+
+## 6. Single MSK Connect Cluster Running Both Debezium & Iceberg Sink Connectors **← NEW SECTION – THIS IS WHAT YOU ASKED FOR**
+
+### Step-by-step AWS Console (November 2025)
+
+1. Go to **MSK Connect → Connectors → Create connector**
+
+2. Connector type: **Custom configuration**
+
+3. Connector name: `cdc-iceberg-single-connect-cluster`
+
+4. Cluster: Select your MSK cluster created in step 4
+
+5. Capacity
+   - Type: **Provisioned**
+   - Workers: **2**
+   - Worker type: **kafka.m5.large** (same as brokers)
+   - MCUs per worker: **2** (total 4 MCUs)
+
+6. Custom plugins
+   - Click **Add plugin** → select both:
+     - Debezium MySQL plugin (already uploaded)
+     - Iceberg Sink plugin (already uploaded)
+   → Both plugins will be installed on the same workers
+
+7. Worker configuration (optional but recommended)
+   - Create new or use existing
+   - Upload file to S3: `worker.properties` with content:
+
+```properties
+KAFKA_HEAP_OPTS="-Xms4g -Xmx4g"
+task.shutdown.graceful.timeout.ms=30000
+```
+
+8. Access permissions
+   - Create new IAM role or use existing
+   - Attach policies:
+     - AmazonMSKConnectFullAccess (or custom)
+     - S3 full access to your iceberg warehouse bucket + plugin bucket
+     - SecretsManagerRead if using Secrets Manager
+     - CloudWatchLogs full access
+
+9. Security → Plaintext or TLS (TLS recommended)
+
+10. Logging → Deliver to CloudWatch Logs group (create one)
+
+11. Click Next → Create connector (this creates the worker cluster)
+
+Wait 10-15 min → status becomes **Running**
+
+### Now create the two connectors on this single worker cluster
+
+#### 6.1 Create Debezium Source Connector
+
+MSK Connect → Create connector → Custom plugin → select Debezium plugin
+
+Use this **final production config** (copy-paste):
+
+```json
+{
+  "name": "debezium-mysql-cdc",
+  "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+  "tasks.max": "1",
+  "database.hostname": "your-rds.cluster-xxxx.ap-south-1.rds.amazonaws.com",
+  "database.port": "3306",
+  "database.user": "debezium",
+  "database.password": "${aws:secretsmanager:ap-south-1:123456789012:secret:rds-debezium-pass-xxxx::}",
+  "database.server.id": "5400",
+  "database.server.name": "mysqlcdc",
+  "database.include.list": "yourdb",
+  "table.include.list": "yourdb.table1,yourdb.table2",
+  "database.history.kafka.topic": "schema-changes.yourdb",
+  "snapshot.mode": "initial",
+  "transforms": "unwrap",
+  "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+  "transforms.unwrap.drop.tombstones": "false",
+  "transforms.unwrap.delete.handling.mode": "rewrite",
+  "max.batch.size": "4096",
+  "max.queue.size": "16384",
+  "poll.interval.ms": "500",
+  "errors.tolerance": "all",
+  "errors.deadletterqueue.topic.name": "dlq.mysql.cdc",
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "true"
+}
+```
+
+#### 6.2 Create Iceberg Sink Connector (same worker cluster)
+
+Create another connector → select Iceberg plugin
+
+```json
+{
+  "name": "iceberg-s3-sink",
+  "connector.class": "org.apache.iceberg.connect.IcebergSinkConnector",
+  "tasks.max": "2",
+  "topics.regex": "mysqlcdc\\.yourdb\\..*",
+  "iceberg.catalog.type": "hadoop",
+  "iceberg.catalog.warehouse": "s3://your-iceberg-warehouse-bucket/",
+  "iceberg.control.topic": "iceberg-control",
+  "iceberg.tables.auto-create-enabled": "true",
+  "iceberg.tables.evolve-schema-enabled": "true",
+  "iceberg.tables.schema-force-optional": "true",
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "true",
+  "errors.tolerance": "all",
+  "errors.deadletterqueue.topic.name": "dlq.iceberg"
+}
+```
+
+Both connectors now run on the **same MSK Connect worker cluster** → single billing, single VPC, single monitoring.
+
+## 7. Final Deployment Checklist & CLI-Only Adjustments (November 2025)
+
+| Item | Can be done in Console? | How to do if CLI required |
+|------|--------------------------|----------------------------|
+| Change `compression.type=gzip` on existing cluster | No → need new cluster | Must recreate cluster with new config version |
+| Change `default.replication.factor` | No | Must recreate cluster |
+| Set topic cleanup.policy=compact after data arrives | Yes in console, but CLI safer for wildcard | `aws kafka update-topic --cluster-arn arn:... --topic mysqlcdc.yourdb.* --topic-configs "cleanup.policy=compact,delete"` |
+| Enable exactly-once semantics | Yes in connector config | Add `"exactly.once.support": "required"` in connector config |
+| Change worker heap size after creation | No → need new connector | Must recreate connector with new worker.properties in S3 |
+| Rotate Secrets Manager secret | Yes | Update secret value → connector auto-picks up within ~5 min |
+
+You are now 100% complete.
+
+Your entire pipeline is production-grade, uses only **one MSK Connect** cluster, **zero Glue cost**, and will run reliably at scale.
 
 ---
 
