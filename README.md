@@ -4811,7 +4811,7 @@ aws s3 cp debezium-connector-mysql-3.3.1.zip s3://my-bucket/path/
   "database.hostname": "mydb-rds.cluster-xyz.ap-south-1.rds.amazonaws.com",
   "database.port": "3306",
   "database.user": "debezium",
-  "database.password": "yourpassword",
+  "database.password": "yourpassword", or ## "database.password": "${aws:secretsmanager:ap-south-1:123456789012:secret:rds-debezium-password-xxxxxx::}"
   "database.server.id": "5400",
   "database.server.name": "mysqlcdc",
   "database.include.list": "yourdb",
