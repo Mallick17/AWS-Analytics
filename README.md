@@ -5112,8 +5112,96 @@ These are set via MSK Connect console/API, not in JSON.
 
 ---
 
-## 4. Create MSK Cluster
+## 4. Create MSK Cluster **← **CONSOLE STEPS**
 
+### Step-by-step in AWS Console (November 2025)
+
+1. Go to Amazon MSK → Clusters → Create cluster  
+2. Choose **Custom create** (not Quick create)
+
+3. Cluster creation method → **Provisioned**
+
+4. Cluster name: `rds-cdc-iceberg-prod`
+
+5. Kafka version: **Apache Kafka 3.7.0** (latest stable in MSK as of Nov 2025)
+
+6. Broker type & count
+   - Instance type: **kafka.m5.large** (or kafka.m7g.large if you want ARM)
+   - Number of zones: **3**
+   - Brokers per zone: **3** → Total 9 brokers (maximum durability)
+
+7. Storage
+   - Storage type: **Provisioned IOPS (gp3)**
+   - Storage volume size: **4000 GiB per broker**
+   - Provisioned IOPS: **4000**
+   - Throughput: **1000 MiB/s**
+
+8. Networking
+   - VPC, 3 private subnets (different AZs), Security group allowing 9092/9094/9098 from MSK Connect SG & RDS SG
+
+9. Encryption
+   - In-transit: **TLS encryption** (enabled)
+   - At-rest: **AWS KMS** (use default or customer-managed)
+
+10. Monitoring
+    - Enhanced monitoring: **Per-topic per-partition metrics** (Level 3)
+
+11. **Cluster configuration** ← **CRITICAL**
+    - Click **Create configuration** (or use existing)
+    - Name: `cdc-iceberg-prod-config-v1`
+    - Start from **Amazon MSK default configuration**
+    - **Add/replace** these exact lines in the configuration text box:
+
+```properties
+# Durability & Safety
+default.replication.factor=3
+min.insync.replicas=2
+offsets.topic.replication.factor=3
+transaction.state.log.replication.factor=3
+transaction.state.log.min.isr=2
+unclean.leader.election.enable=false
+
+# Performance for CDC workloads
+num.io.threads=16
+num.network.threads=16
+num.replica.fetchers=6
+replica.fetch.max.bytes=10485760
+queued.max.requests=1000
+socket.request.max.bytes=104857600
+
+# Compression (saves cost)
+compression.type=gzip
+
+# Log segment settings
+log.roll.ms=86400000
+log.segment.bytes=1073741824
+
+# Topic auto-creation safe
+auto.create.topics.enable=true
+```
+
+12. Click Create → wait ~20-30 min for cluster **Active**
+
+### After cluster is ACTIVE → Create internal topics (Console or CLI)
+
+You can do this in console:
+
+MSK → Clusters → your cluster → View client information → Bootstrap servers (copy)
+
+Then Topics → Create topic
+
+Create these 6 topics exactly:
+
+| Topic                               | Partitions | Replication | Cleanup policy | Important configs                                  |
+|-------------------------------------|------------|------------|------------------|----------------------------------------------------|
+| schema-changes.yourdb               | 1          | 3          | compact          | retention.ms=-1                                    |
+| offsets.mysql.cdc                   | 1          | 3          | compact          | retention.ms=-1                                    |
+| connect-configs                     | 1          | 3          | compact          | retention.ms=-1                                    |
+| connect-offsets                     | 25         | 3          | compact          | retention.ms=-1                                    |
+| connect-status                      | 5          | 3          | compact          | retention.ms=-1                                    |
+| iceberg-control                     | 10         | 3          | compact,delete   | retention.ms=-1                                    |
+
+(These will be auto-created anyway, but pre-creating guarantees correct settings)
 
 ---
 
